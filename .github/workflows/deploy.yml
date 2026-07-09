@@ -1,0 +1,45 @@
+# Bygger og publiserer Discloggen til GitHub Pages.
+# Erstatter den innebygde «Deploy from a branch»-byggingen (som satt seg fast
+# i «queued» og aldri ble ferdig) med et eksplisitt, forutsigbart deploy-steg.
+#
+# Krever ETT engangsvalg i repoet:
+#   Settings → Pages → Build and deployment → Source = «GitHub Actions»
+name: Deploy til GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Nok rettigheter til å publisere Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Kjør én deploy om gangen, ikke avbryt en pågående (unngår «cancelled»-runs)
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hent kildekode
+        uses: actions/checkout@v4
+
+      - name: Sett opp Pages
+        uses: actions/configure-pages@v5
+
+      - name: Last opp nettstedet (statiske filer, ingen byggesteg)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Publiser til Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

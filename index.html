@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Discloggen</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#131110">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+  <main>
+    <section id="v-train" class="view active noscroll"></section>
+    <section id="v-discs" class="view"></section>
+    <section id="v-stats" class="view"></section>
+    <section id="v-more" class="view"></section>
+  </main>
+  <nav class="tabs">
+    <button data-act="tab" data-arg="train" class="on"><span class="ico">🥏</span>Trening</button>
+    <button data-act="tab" data-arg="discs"><span class="ico">🎒</span>Discer</button>
+    <button data-act="tab" data-arg="stats"><span class="ico">📊</span>Statistikk</button>
+    <button data-act="tab" data-arg="more"><span class="ico">⚙️</span>Mer</button>
+  </nav>
+</div>
+
+<!-- GPS-måling -->
+<div class="modal" id="m-measure">
+  <div class="sheet center">
+    <h2 id="ms-title">Måler posisjon …</h2>
+    <div class="pulse"></div>
+    <div class="acc num" id="ms-acc">–</div>
+    <div class="sub" id="ms-hint">Venter på GPS-signal …</div>
+    <div class="btnrow">
+      <button class="ghost playbtn" data-act="measure-cancel">Avbryt</button>
+      <button class="ghost playbtn" data-act="measure-retry">Mål på nytt</button>
+      <button class="primary playbtn" id="ms-use" data-act="measure-use" disabled>Bruk punkt</button>
+    </div>
+  </div>
+</div>
+
+<!-- resultat etter landing -->
+<div class="modal" id="m-result">
+  <div class="sheet" data-act="result-close">
+    <div class="emoji" id="res-emoji">🥏</div>
+    <div class="bignum num" id="res-dist">0</div>
+    <div class="eyebrow" id="res-unit">meter</div>
+    <div class="sub mt8" id="res-sub"></div>
+    <div class="record" id="res-record" style="display:none">🏆 Ny rekord!</div>
+    <div class="sub mt12">Trykk for å fortsette</div>
+  </div>
+</div>
+
+<!-- valg av siktepunkt (ny runde / start) -->
+<div class="modal" id="m-aim">
+  <div class="sheet">
+    <h2>Siktepunkt for runden</h2>
+    <p class="sub">Siktelinjen brukes til å beregne hvor langt til venstre/høyre kastene lander. Uten siktepunkt logges bare lengde.</p>
+    <div class="mt12" id="aim-opts"></div>
+  </div>
+</div>
+
+<!-- avslutt økt med manglende landinger -->
+<div class="modal" id="m-end">
+  <div class="sheet">
+    <h2>Discer mangler landing</h2>
+    <p class="sub" id="end-info"></p>
+    <div class="btnrow">
+      <button class="ghost playbtn" data-act="end-cancel">Fortsett økten</button>
+      <button class="danger playbtn" data-act="end-anyway">Avslutt likevel</button>
+    </div>
+  </div>
+</div>
+
+<!-- disc-skjema -->
+<div class="modal" id="m-disc">
+  <div class="sheet">
+    <h2 id="dm-title">Ny disc</h2>
+    <label class="photobox" for="f-photo" id="dm-photo"><span class="ph">📷 Ta bilde</span></label>
+    <div class="center sub" style="margin-bottom:10px">Trykk for å ta bilde av discen</div>
+    <div class="field">
+      <label>Navn</label>
+      <input type="text" id="dm-name" maxlength="24" placeholder="F.eks. Destroyer">
+    </div>
+    <div class="field">
+      <label>Type</label>
+      <div class="seg" id="dm-type">
+        <button data-act="dm-type" data-arg="Putter">Putter</button>
+        <button data-act="dm-type" data-arg="Midrange">Midrange</button>
+        <button data-act="dm-type" data-arg="Fairway">Fairway</button>
+        <button data-act="dm-type" data-arg="Driver">Driver</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Flight numbers</label>
+      <div class="flightrow">
+        <div><input type="number" id="dm-sp" step="0.5" inputmode="decimal"><small>Speed</small></div>
+        <div><input type="number" id="dm-gl" step="0.5" inputmode="decimal"><small>Glide</small></div>
+        <div><input type="number" id="dm-tu" step="0.5" inputmode="decimal"><small>Turn</small></div>
+        <div><input type="number" id="dm-fa" step="0.5" inputmode="decimal"><small>Fade</small></div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Farge i statistikk</label>
+      <div class="colorrow" id="dm-colors"></div>
+    </div>
+    <div class="btnrow">
+      <button class="ghost playbtn" data-act="dm-cancel">Avbryt</button>
+      <button class="primary playbtn" data-act="dm-save">Lagre disc</button>
+    </div>
+    <div class="btnrow" id="dm-delrow" style="display:none">
+      <button class="danger playbtn" data-act="dm-del" data-arm>Slett disc</button>
+    </div>
+  </div>
+</div>
+
+<!-- beskjæring av bilde -->
+<div class="modal" id="m-crop">
+  <div class="sheet">
+    <h2>Juster utsnitt</h2>
+    <div id="cropwrap"><canvas id="cropcv" width="256" height="256"></canvas></div>
+    <input type="range" id="cropzoom" min="1" max="3" step="0.01" value="1">
+    <p class="sub center">Dra for å flytte · skyv for å zoome</p>
+    <div class="btnrow">
+      <button class="ghost playbtn" data-act="crop-cancel">Avbryt</button>
+      <button class="primary playbtn" data-act="crop-ok">Bruk bilde</button>
+    </div>
+  </div>
+</div>
+
+<!-- øktdetalj -->
+<div class="modal" id="m-session">
+  <div class="sheet" id="sd-body"></div>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="f-photo" accept="image/*" capture="environment" hidden>
+<input type="file" id="f-import" accept="application/json,.json" hidden>
+
+<script type="module" src="js/app.js"></script>
+<script>
+if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
+</script>
+</body>
+</html>

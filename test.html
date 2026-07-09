@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head><meta charset="utf-8"><title>Discloggen selvtest</title></head>
+<body>
+<h1>Selvtest av regnelogikk</h1>
+<div id="out"></div>
+<script type="module">
+import { distM, bearing, destination, decompose } from "./js/geo.js";
+import { missOf } from "./js/state.js";
+
+const out = document.getElementById("out");
+let fails = 0;
+function ok(name, got, want, tol = 0.5) {
+  const pass = Math.abs(got - want) <= tol;
+  if (!pass) fails++;
+  out.innerHTML += `<div>${pass ? "PASS" : "FAIL"} ${name}: fikk ${got.toFixed(2)}, ventet ${want}</div>`;
+}
+
+const base = { la: 59.9139, lo: 10.7522 };
+const north100 = destination(base, 0, 100);
+ok("distM 100 m nord", distM(base, north100), 100, 0.1);
+ok("bearing nord", bearing(base, north100), 0, 0.1);
+const east50 = destination(base, 90, 50);
+ok("bearing øst", bearing(base, east50), 90, 0.1);
+
+// siktelinje 100 m nord; landing 60 m nord + 5 m øst
+const landing = destination(destination(base, 0, 60), 90, 5);
+const r = decompose(base, north100, landing);
+ok("decompose dist", r.dist, Math.hypot(60, 5), 0.2);
+ok("decompose side (+høyre)", r.side, 5, 0.2);
+ok("decompose frem", r.frem, 60, 0.2);
+
+// uten siktepunkt
+const r2 = decompose(base, null, landing);
+ok("uten aim: dist", r2.dist, Math.hypot(60, 5), 0.2);
+out.innerHTML += `<div>${r2.side === null && r2.frem === null ? "PASS" : "FAIL"} uten aim: side/frem er null</div>`;
+if (r2.side !== null) fails++;
+
+// presisjon: mål 100 m unna, landing 60 m frem + 5 m til høyre → bom = hypot(5, 40)
+ok("missOf", missOf({ side: r.side, frem: r.frem, td: distM(base, north100) }), Math.hypot(5, 40), 0.3);
+
+out.innerHTML += `<div id="sum">${fails ? "FAILS:" + fails : "ALLE TESTER OK"}</div>`;
+</script>
+</body>
+</html>

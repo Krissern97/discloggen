@@ -9,8 +9,8 @@ import { renderStats } from "./stats.js";
 // VIKTIG: bump VERSION og BUILD ved HVER deploy, sammen med CACHE i sw.js —
 // dette er den enkleste måten å bekrefte på telefonen at man faktisk kjører
 // nyeste versjon etter en oppdatering (se Mer-fanen).
-const VERSION = "1.5";
-const BUILD = "10. juli 2026, 14:40";
+const VERSION = "1.6";
+const BUILD = "10. juli 2026, 15:30";
 let tab = "train";
 
 /* ---------- faner ---------- */

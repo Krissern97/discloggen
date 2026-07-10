@@ -206,7 +206,7 @@ ACTIONS["dlsort"]("presisjon");
 dOrder = ["MinPutter", "MinMid", "MinDriver"].map(n => discsSection().indexOf(n));
 assert("disc-sortering presisjon: lavest snittbom (Putter, 1m) først", dOrder[0] < dOrder[1] && dOrder[1] < dOrder[2]);
 
-// --- sikte-strek (throwline) i målskive-kartet ---
+// --- målskive: enkel senterlinje + trekant (samme visuelle mønster som spredningskartet) ---
 S.discs = [{ id: "X2", navn: "Sikteputter", type: "Putter", ci: 0, img: null, ark: false, ts: 1 }];
 S.sessions = [{
   id: "sq", ts: 1, end: 1, sm: "P",
@@ -215,15 +215,10 @@ S.sessions = [{
 S.cur = null;
 renderStats();
 ACTIONS["disc-open"]("X2");
-const throwLineSame = document.getElementById("sd-body").innerHTML;
-assert("sikte-strek: fast avstand (samme td) vises som enkel strek med tall", throwLineSame.includes("throwline") && throwLineSame.includes("50 m"));
-
-// ulik td på tvers av runder → fallback til snitt-tekst i stedet for (misvisende) strek
-S.sessions[0].rounds.push({ ts: 2, start: { la: 0, lo: 0 }, aim: { la: 0, lo: 0 }, pend: [], throws: [{ ...mkP2("X2", 2), td: 80 }] });
-renderStats();
-ACTIONS["disc-open"]("X2");
-const throwLineDiff = document.getElementById("sd-body").innerHTML;
-assert("sikte-strek: ulik avstand på tvers av runder gir snitt-tekst, ikke misvisende strek", throwLineDiff.includes("snitt avstand til mål") && !throwLineDiff.includes('class="throwline"'));
+const targetHTML = document.getElementById("sd-body").innerHTML;
+assert("målskive: stiplet senterlinje (dashed) vises, uten tallverdi på streken", targetHTML.includes('stroke-dasharray="4 4"'));
+assert("målskive: trekant for kastested vises (path-element)", /<path d="M [\d.]+ /.test(targetHTML));
+assert("målskive: den gamle avstands-diagram-boksen er fjernet (fjernet etter tilbakemelding)", !targetHTML.includes('class="throwline"'));
 
 // --- live presisjonsøkt: «Avstand mål» øverst i KPI-raden ---
 const startB = { la: 59.9, lo: 10.7 };

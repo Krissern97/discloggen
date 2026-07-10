@@ -165,23 +165,12 @@ function markerSVG(cx, cy, d, tip) {
   return hit + mark;
 }
 
-/* enkel sikte-strek: kastested → mål, med avstanden — den «lengdegrafikk»-
-   streken brukeren ba om, men for presisjonskast. Målskive-kartet er zoomet
-   tett inn på selve treffspredningen (ofte bare noen meter bred), mens
-   avstanden til målet gjerne er 30–100+ m — å tegne dem til skala i samme
-   kart ville gjort treffspredningen usynlig liten. Denne streken er derfor
-   et eget, enkelt (ikke skala-riktig langs kartet) diagram med tallet på. */
-function throwLineHTML(P) {
-  const tds = [...new Set(P.map(t => t.td))];
-  if (tds.length === 1) {
-    return `<div class="throwline"><span class="tl-end">📍</span><span class="tl-line"><b>${Math.round(tds[0])} m</b></span><span class="tl-end">🎯</span></div>`;
-  }
-  const avgTd = avgArr(P.map(t => t.td));
-  return `<p class="sub center">📍 → 🎯 snitt avstand til mål: <b style="color:var(--ink)">${fmt1(avgTd)} m</b>
-    (${Math.round(Math.min(...tds))}–${Math.round(Math.max(...tds))} m)</p>`;
-}
-
-/* målskive-kart: landinger relativt til målet, med avstandsringer */
+/* målskive-kart: landinger relativt til målet, med avstandsringer.
+   Senterlinja (stiplet, med trekant nederst = «du, kastestedet») er samme
+   enkle visuelle referanse som i spredningskartet for lengdekast — bare en
+   retningslinje, ikke skala-riktig til faktisk avstand (målet er alltid i
+   sentrum her, kastestedet er ofte 30–100+ m unna og ville uansett havnet
+   langt utenfor et kart zoomet inn på selve treffspredningen). */
 function targetCard(P, title) {
   const pts = P.map(t => ({ t, x: t.side, y: t.frem - t.td }));
   const R = Math.max(6, ...pts.map(p => Math.hypot(p.x, p.y))) * 1.2;
@@ -204,19 +193,19 @@ function targetCard(P, title) {
   const used = [...new Set(P.map(t => t.discId))].map(id => discById(id)).filter(Boolean);
 
   return `<div class="card mt12"><div class="eyebrow">${title}</div>
-    ${throwLineHTML(P)}
     <div class="scatter mt8">
       <svg viewBox="0 0 ${W} ${W}" role="img" aria-label="Treffbilde rundt målet">
         ${clipDefs()}
         ${rings}
+        <line x1="${C}" y1="0" x2="${C}" y2="${W}" stroke="var(--ink2)" stroke-width="1" stroke-dasharray="4 4" opacity=".6"/>
+        <path d="M ${C - 6} ${W - 1} L ${C + 6} ${W - 1} L ${C} ${W - 10} Z" fill="var(--ink)"/>
         <line x1="${C - 8}" y1="${C}" x2="${C + 8}" y2="${C}" stroke="var(--ink)" stroke-width="2"/>
         <line x1="${C}" y1="${C - 8}" x2="${C}" y2="${C + 8}" stroke="var(--ink)" stroke-width="2"/>
-        <text x="${C}" y="${W - 6}" text-anchor="middle" font-size="10" fill="var(--ink2)">for kort ↓ · for langt ↑ · sett fra kastested</text>
         ${dots}
       </svg>
       <div class="tip"></div>
     </div>${legendHTML(used)}
-    <p class="sub mt8">Trykk et punkt for å se nøyaktig lengde.</p></div>`;
+    <p class="sub mt8">Trykk et punkt for å se nøyaktig lengde. Trekanten nederst er kastested.</p></div>`;
 }
 
 function sessionsHTML() {

@@ -58,11 +58,13 @@ kastested — f.eks. kast 20 discer, gå og hent dem, det er én runde.
    strek, sideavvik osv., så det gir mest mening å sette det først, deretter gå/
    peke mot der man skal sikte).
    I P vises **avstand til mål** som egen KPI-stat øverst i live-visningen så
-   snart mål er satt (`Math.round(distM(r.start, r.aim))` i `liveHTML()`), og
-   samme avstand vises som en enkel sikte-strek (📍┄┄┄Xm┄┄┄🎯) over treffbilde-
-   kartet i statistikk (`throwLineHTML()` i stats.js — viser snitt-tekst i stedet
-   for streken hvis flere runder i visningen har ulik avstand til mål, for å
-   unngå en misvisende til-skala-strek).
+   snart mål er satt (`Math.round(distM(r.start, r.aim))` i `liveHTML()`).
+   Målskive-kartet (`targetCard()` i stats.js) har i tillegg en stiplet
+   senterlinje + en liten trekant nederst («kastested») — samme rene visuelle
+   referanse-mønster som spredningskartet for lengdekast bruker, IKKE en
+   skala-riktig avstand eller et tall på selve streken (målet sitter alltid i
+   sentrum av dette kartet, mens kastestedet reelt er 30–100+ m unna og ville
+   uansett havnet langt utenfor et kart zoomet inn på selve treffspredningen).
 2. Modus **Kaster**: velg BH/FH, trykk discen for hvert kast → havner i `pend`
    (rent synkront, ingen GPS involvert — bruker rundens `start`-punkt senere).
 3. Modus **Henter**: GPS kjører kontinuerlig i bakgrunnen gjennom hele økten

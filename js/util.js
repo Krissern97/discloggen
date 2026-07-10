@@ -1,4 +1,4 @@
-// Felles hjelpere: DOM, handlinger (pointerdown), feedback, modaler, konfetti, applaus.
+// Felles hjelpere: DOM, handlinger (click), feedback, modaler, konfetti, applaus.
 
 export const $  = s => document.querySelector(s);
 export const $$ = s => [...document.querySelectorAll(s)];
@@ -11,16 +11,19 @@ export const fmtSide = s => Math.abs(s) < 0.5 ? "rett på linja" : `${Math.round
 export const fmtDate = ts => new Date(ts).toLocaleDateString("nb-NO", { weekday: "short", day: "numeric", month: "short" });
 export const fmtTime = ts => new Date(ts).toLocaleTimeString("nb-NO", { hour: "2-digit", minute: "2-digit" });
 
-/* ---------- handlings-register + pointerdown-delegering ----------
-   Alle knapper bruker data-act (+ evt. data-arg). Reagerer på pointerdown,
-   aldri click — et click kan forkastes hvis fingeren sklir 2 mm.
+/* ---------- handlings-register + click-delegering ----------
+   Alle knapper bruker data-act (+ evt. data-arg). Reagerer på standard click
+   (slipp-basert): en click avbrytes automatisk av nettleseren hvis fingeren
+   beveger seg (tolkes som scroll/drag) — nettopp det vi vil ha når knappene
+   ligger i skrollbare lister. `touch-action:manipulation` (ikke `none`) på
+   knappene gjør at scroll fortsatt fungerer normalt gjennom dem, samtidig som
+   dobbelttrykk-zoom er avskrudd — ingen 300ms-forsinkelse på moderne mobiler.
    data-arm = to-trykks bekreftelse (aldri confirm()/alert()). */
 export const ACTIONS = {};
 
-document.addEventListener("pointerdown", e => {
+document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]");
   if (!el || el.disabled) return;
-  e.preventDefault();
   tapFeedback(e.clientX, e.clientY);
   if ("arm" in el.dataset) {
     if (el.dataset.armed) {
@@ -38,7 +41,7 @@ document.addEventListener("pointerdown", e => {
   }
   const fn = ACTIONS[el.dataset.act];
   if (fn) fn(el.dataset.arg, el);
-}, { passive: false });
+});
 
 /* ---------- synlig + følbar trykk-bekreftelse ---------- */
 function tapFeedback(x, y) {

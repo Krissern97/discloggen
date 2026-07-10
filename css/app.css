@@ -85,18 +85,18 @@ button:disabled{opacity:.45}
   font-size:14px; font-weight:700; min-height:44px; padding:0 14px;
 }
 .danger{background:none; border:1px solid var(--red); color:var(--red); font-size:14px; font-weight:700; min-height:44px; padding:0 14px}
-.playbtn{touch-action:none}
+.playbtn{touch-action:manipulation}
 
 /* segmentkontroll */
 .seg{display:flex; gap:4px; background:var(--surface2); border-radius:12px; padding:4px}
-.seg button{flex:1; min-height:38px; font-size:13px; font-weight:700; color:var(--ink2); border-radius:9px; touch-action:none}
+.seg button{flex:1; min-height:38px; font-size:13px; font-weight:700; color:var(--ink2); border-radius:9px; touch-action:manipulation}
 .seg button.on{background:var(--green); color:var(--green-ink)}
 
 /* rundefaner (bla mellom runder i øktdetalj) — horisontalt scrollbare piller */
 .roundtabs{display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px}
 .roundtabs button{
   flex:0 0 auto; min-height:34px; padding:0 14px; border-radius:99px;
-  background:var(--surface2); color:var(--ink2); font-size:13px; font-weight:700; touch-action:none;
+  background:var(--surface2); color:var(--ink2); font-size:13px; font-weight:700; touch-action:manipulation;
 }
 .roundtabs button.on{background:var(--green); color:var(--green-ink)}
 
@@ -140,7 +140,7 @@ button:disabled{opacity:.45}
 .discbtn{
   position:relative; background:var(--surface); border:1px solid var(--line);
   border-radius:14px; padding:8px 6px 7px; text-align:center; box-shadow:var(--shadow);
-  touch-action:none; display:flex; flex-direction:column; align-items:center; gap:5px;
+  touch-action:manipulation; display:flex; flex-direction:column; align-items:center; gap:5px;
 }
 .discbtn img,.discbtn .noimg{
   width:56px; height:56px; border-radius:50%; object-fit:cover;
@@ -214,7 +214,7 @@ nav.tabs button.on{color:var(--green); background:var(--green-soft)}
 
 /* fargevelger */
 .colorrow{display:flex; gap:8px; flex-wrap:wrap}
-.colorrow button{width:34px; height:34px; border-radius:50%; border:3px solid transparent; touch-action:none}
+.colorrow button{width:34px; height:34px; border-radius:50%; border:3px solid transparent; touch-action:manipulation}
 .colorrow button.on{border-color:var(--ink)}
 
 /* bildevelger */
@@ -268,7 +268,13 @@ nav.tabs button.on{color:var(--green); background:var(--green-soft)}
 }
 .legend{display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:10px}
 .legend span{display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; color:var(--ink2)}
-.legend i{width:10px; height:10px; border-radius:50%; display:inline-block}
+.legend i{width:12px; height:12px; border-radius:50%; display:inline-block}
+.legend .legicon{width:12px; height:12px; border-radius:50%; object-fit:cover; display:inline-block}
+
+/* disc-ikon i lister (statistikk «Per disc», disc-detalj) — bilde med farget
+   ramme, eller fargeprikk-fallback (.ph) uten bilde */
+.discmini{width:40px; height:40px; border-radius:50%; object-fit:cover; flex-shrink:0; border:2px solid var(--dc,var(--line))}
+.discmini.ph{display:flex; align-items:center; justify-content:center; font-size:18px; background:var(--surface2)}
 
 /* ---------- trykk-feedback ---------- */
 .tapring{

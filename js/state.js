@@ -62,14 +62,16 @@ export const activeDiscs = () => S.discs.filter(d => !d.ark);
 export const curRound = () => S.cur ? S.cur.rounds[S.cur.rounds.length - 1] : null;
 
 /* Alle fullførte kast på tvers av lagrede økter + pågående, valgfritt filtrert
-   på kasttype. Hvert kast får med øktmodusen: sm = "L" (lengde) | "P" (presisjon). */
+   på kasttype. Hvert kast får med øktmodusen (sm = "L"/"P") og en referanse til
+   økten det kom fra (sessId, sessTs) — brukes til å gruppere trendgrafer per
+   økt kronologisk uten å lagre dette redundant i selve kast-objektet. */
 export function allThrows(kt) {
   const sessions = [...S.sessions, ...(S.cur ? [S.cur] : [])];
   const out = [];
   for (const s of sessions)
     for (const r of s.rounds)
       for (const t of r.throws)
-        if (!kt || kt === "ALL" || t.kt === kt) out.push({ ...t, sm: s.sm ?? "L" });
+        if (!kt || kt === "ALL" || t.kt === kt) out.push({ ...t, sm: s.sm ?? "L", sessId: s.id, sessTs: s.ts });
   return out;
 }
 

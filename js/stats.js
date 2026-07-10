@@ -24,8 +24,8 @@ export function renderStats() {
     </div>
     ${kpiHTML(L)}
     ${scatterCard(L, "Spredningskart — lengdekast")}
-    ${perDiscHTML(L)}
     ${precisionHTML(P)}
+    ${perDiscUnifiedHTML(L, P)}
     ${sessionsHTML()}
     <div style="height:12px"></div>`;
 }
@@ -45,25 +45,6 @@ function kpiHTML(throws) {
     <p class="sub mt8 center">🏆 Lengste: <b>${fmtM(maxT.dist)}</b> med ${esc(discById(maxT.discId)?.navn ?? "ukjent disc")} · ${fmtDate(maxT.ts)}</p>`;
 }
 
-function perDiscHTML(throws) {
-  const rows = S.discs
-    .map(d => ({ d, th: throws.filter(t => t.discId === d.id) }))
-    .filter(x => x.th.length)
-    .sort((a, b) => avg(b.th) - avg(a.th));
-  if (!rows.length) return "";
-  return `<div class="card mt12"><div class="eyebrow">Per disc</div><ul class="hist">` +
-    rows.map(({ d, th }) => {
-      const sides = th.filter(t => t.side !== null).map(t => t.side);
-      const bias = sides.length ? sides.reduce((a, s) => a + s, 0) / sides.length : null;
-      const spread = sides.length > 1 ? std(sides) : null;
-      return `<li>
-        <span class="d"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--c${d.ci});margin-right:6px"></i>${esc(d.navn)}<br>
-        <small>${th.length} kast${bias !== null ? ` · tendens ${fmtSide(bias)}` : ""}${spread !== null ? ` · spredning ±${Math.round(spread)} m` : ""}</small></span>
-        <span class="v num">${fmt1(avg(th))} m<br><small style="font-weight:600;color:var(--ink2)">maks ${Math.round(Math.max(...th.map(t => t.dist)))}</small></span>
-      </li>`;
-    }).join("") + `</ul></div>`;
-}
-
 /* ---------- presisjonstrening (mot mål) ---------- */
 
 function precisionHTML(P) {
@@ -71,10 +52,6 @@ function precisionHTML(P) {
   const misses = P.map(missOf);
   const snitt = misses.reduce((a, m) => a + m, 0) / misses.length;
   const inn10 = Math.round(100 * misses.filter(m => m <= 10).length / misses.length);
-  const rows = S.discs
-    .map(d => ({ d, th: P.filter(t => t.discId === d.id) }))
-    .filter(x => x.th.length)
-    .sort((a, b) => avgMiss(a.th) - avgMiss(b.th));
   return `
     <hr class="sep">
     <div class="eyebrow">🎯 Presisjonstrening</div>
@@ -84,19 +61,74 @@ function precisionHTML(P) {
       <div class="stat gold"><b class="num">${fmt1(Math.min(...misses))}</b><span>Beste m</span></div>
       <div class="stat"><b class="num">${inn10}%</b><span>Innen 10 m</span></div>
     </div>
-    ${targetCard(P, "Treffbilde rundt målet")}
-    <div class="card mt12"><div class="eyebrow">Per disc</div><ul class="hist">` +
-    rows.map(({ d, th }) => {
-      const ms = th.map(missOf);
-      return `<li>
-        <span class="d"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--c${d.ci});margin-right:6px"></i>${esc(d.navn)}<br>
-        <small>${th.length} kast · ${Math.round(100 * ms.filter(m => m <= 10).length / ms.length)}% innen 10 m</small></span>
-        <span class="v num">${fmt1(avgMiss(th))} m bom<br><small style="font-weight:600;color:var(--ink2)">beste ${fmt1(Math.min(...ms))}</small></span>
-      </li>`;
-    }).join("") + `</ul></div>`;
+    ${targetCard(P, "Treffbilde rundt målet")}`;
 }
 
-const avgMiss = th => th.reduce((a, t) => a + missOf(t), 0) / th.length;
+/* ---------- disc-ikon (bilde med farget ramme, eller fargeprikk-fallback) ---------- */
+
+function discIconHTML(d, cls) {
+  return d.img
+    ? `<img class="${cls}" src="${d.img}" alt="" style="--dc:var(--c${d.ci})">`
+    : `<span class="${cls} ph" style="--dc:var(--c${d.ci})">🥏</span>`;
+}
+
+/* ---------- samlet, sorterbar per-disc-oversikt ----------
+   «Totalt» er en komposittscore: hver discs snittlengde og snittbom
+   normaliseres til 0..1 min-max RELATIVT TIL BRUKERENS EGNE DISCER (ikke en
+   absolutt fasit) — slik kan en kort, presis putter og en lang driver
+   rangeres på samme skala uten å blande meter-lengde og meter-bom urettferdig.
+   Komposittscore = snitt av de to (der begge finnes), ellers den ene som finnes. */
+let discSort = "totalt"; // "lengde" | "presisjon" | "totalt"
+
+function perDiscUnifiedHTML(L, P) {
+  const rows = S.discs.map(d => {
+    const dl = L.filter(t => t.discId === d.id);
+    const dp = P.filter(t => t.discId === d.id);
+    if (!dl.length && !dp.length) return null;
+    return { d, dl, dp, lengthAvg: dl.length ? avg(dl) : null, missAvg: dp.length ? avgArr(dp.map(missOf)) : null };
+  }).filter(Boolean);
+  if (!rows.length) return "";
+
+  const lengths = rows.map(r => r.lengthAvg).filter(v => v !== null);
+  const misses = rows.map(r => r.missAvg).filter(v => v !== null);
+  const lMin = lengths.length ? Math.min(...lengths) : 0, lMax = lengths.length ? Math.max(...lengths) : 0;
+  const mMin = misses.length ? Math.min(...misses) : 0, mMax = misses.length ? Math.max(...misses) : 0;
+  for (const r of rows) {
+    const ls = r.lengthAvg === null ? null : (lMax > lMin ? (r.lengthAvg - lMin) / (lMax - lMin) : 1);
+    const ms = r.missAvg === null ? null : (mMax > mMin ? (mMax - r.missAvg) / (mMax - mMin) : 1);
+    r.totalScore = ls !== null && ms !== null ? (ls + ms) / 2 : (ls ?? ms ?? 0);
+  }
+
+  const sorters = {
+    lengde: (a, b) => (b.lengthAvg ?? -Infinity) - (a.lengthAvg ?? -Infinity),
+    presisjon: (a, b) => (a.missAvg ?? Infinity) - (b.missAvg ?? Infinity),
+    totalt: (a, b) => b.totalScore - a.totalScore,
+  };
+  const sorted = [...rows].sort(sorters[discSort]);
+
+  const seg = ["lengde", "presisjon", "totalt"].map(k =>
+    `<button class="${discSort === k ? "on" : ""}" data-act="dsort" data-arg="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join("");
+
+  return `<div class="card mt12">
+    <div class="eyebrow">Per disc</div>
+    <div class="seg mt8">${seg}</div>
+    <ul class="hist mt8">${sorted.map(discRowHTML).join("")}</ul>
+  </div>`;
+}
+
+function discRowHTML({ d, dl, dp, lengthAvg, missAvg }) {
+  return `<li data-act="disc-open" data-arg="${d.id}" style="cursor:pointer">
+    <span class="d" style="display:flex; align-items:center; gap:10px">
+      ${discIconHTML(d, "discmini")}
+      <span><b style="color:var(--ink); font-weight:800">${esc(d.navn)}</b><br>
+      <small>${dl.length + dp.length} kast</small></span>
+    </span>
+    <span class="v num">
+      ${lengthAvg !== null ? `${fmt1(lengthAvg)} m snitt` : ""}${lengthAvg !== null && missAvg !== null ? "<br>" : ""}
+      ${missAvg !== null ? `<small style="font-weight:600;color:var(--ink2)">${fmt1(missAvg)} m bom</small>` : ""}
+    </span>
+  </li>`;
+}
 
 /* ---------- kart-markører ----------
    Hver markør har en usynlig, romslig trykkflate (r=14) uansett synlig stil,
@@ -106,6 +138,19 @@ const MARK_ICON = 20; // diameter (px, i SVG-koordinater) på bilde-ikon
 
 function clipDefs() {
   return `<defs><clipPath id="discclip" clipPathUnits="objectBoundingBox"><circle cx="0.5" cy="0.5" r="0.5"/></clipPath></defs>`;
+}
+
+/* fint, lesbart gridline-intervall for en gitt akse-range (delt av alle kart) */
+function niceStep(range, maxLines = 5) {
+  return [1, 2, 5, 10, 20, 25, 50, 100, 200, 500].find(s => range / s <= maxLines) ?? 500;
+}
+
+/* legend under kart: bilde av discen når det finnes, ellers fargeprikk */
+function legendHTML(used) {
+  if (used.length <= 1) return "";
+  return `<div class="legend">${used.map(d =>
+    `<span>${d.img ? `<img class="legicon" src="${d.img}" alt="">` : `<i style="background:var(--c${d.ci})"></i>`}${esc(d.navn)}</span>`
+  ).join("")}</div>`;
 }
 
 function markerSVG(cx, cy, d, tip) {
@@ -127,7 +172,7 @@ function targetCard(P, title) {
   const W = 340, C = W / 2, PR = W / 2 - 26;
   const px = v => C + (v / R) * PR;
   const py = v => C - (v / R) * PR;
-  const step = [1, 2, 5, 10, 20, 50].find(s => R / s <= 4) ?? 50;
+  const step = niceStep(R, 4);
 
   let rings = "";
   for (let m = step; m <= R; m += step)
@@ -141,8 +186,6 @@ function targetCard(P, title) {
   }).join("");
 
   const used = [...new Set(P.map(t => t.discId))].map(id => discById(id)).filter(Boolean);
-  const legend = used.length > 1
-    ? `<div class="legend">${used.map(d => `<span><i style="background:var(--c${d.ci})"></i>${esc(d.navn)}</span>`).join("")}</div>` : "";
 
   return `<div class="card mt12"><div class="eyebrow">${title}</div>
     <div class="scatter mt8">
@@ -155,7 +198,7 @@ function targetCard(P, title) {
         ${dots}
       </svg>
       <div class="tip"></div>
-    </div>${legend}
+    </div>${legendHTML(used)}
     <p class="sub mt8">Trykk et punkt for å se nøyaktig lengde.</p></div>`;
 }
 
@@ -178,10 +221,6 @@ function sessionsHTML() {
 
 const avg = th => th.reduce((a, t) => a + t.dist, 0) / th.length;
 const avgArr = xs => xs.reduce((a, x) => a + x, 0) / xs.length;
-const std = xs => {
-  const m = xs.reduce((a, x) => a + x, 0) / xs.length;
-  return Math.sqrt(xs.reduce((a, x) => a + (x - m) ** 2, 0) / xs.length);
-};
 
 /* ---------- spredningskart (SVG) ----------
    x = sideavvik fra siktelinja (+høyre/−venstre), y = meter fremover.
@@ -199,7 +238,7 @@ function scatterCard(throws, title) {
   const W = 340, H = 320, L = 34, Rr = 326, T = 12, B = 288, CX = (L + Rr) / 2;
   const px = s => CX + (s / X) * ((Rr - L) / 2);
   const py = f => B - (f / Y) * (B - T);
-  const step = [5, 10, 20, 25, 50, 100].find(s => Y / s <= 6) ?? 100;
+  const step = niceStep(Y, 6);
 
   let grid = "";
   for (let m = step; m <= Y; m += step)
@@ -213,8 +252,6 @@ function scatterCard(throws, title) {
   }).join("");
 
   const used = [...new Set(pts.map(p => p.discId))].map(id => discById(id)).filter(Boolean);
-  const legend = used.length > 1
-    ? `<div class="legend">${used.map(d => `<span><i style="background:var(--c${d.ci})"></i>${esc(d.navn)}</span>`).join("")}</div>` : "";
 
   return `<div class="card mt12"><div class="eyebrow">${title}</div>
     <div class="scatter mt8">
@@ -231,13 +268,13 @@ function scatterCard(throws, title) {
       </svg>
       <div class="tip"></div>
     </div>
-    ${legend}
+    ${legendHTML(used)}
     <p class="sub mt8">Trykk et punkt for å se nøyaktig lengde.${missing ? ` ${missing} kast uten siktepunkt vises ikke (telles i tallene).` : ""}</p>
   </div>`;
 }
 
-/* tooltip: trykk på en prikk */
-document.addEventListener("pointerdown", e => {
+/* tooltip: trykk på en prikk (click, ikke pointerdown — se util.js) */
+document.addEventListener("click", e => {
   const tips = document.querySelectorAll(".scatter .tip");
   tips.forEach(t => { t.style.display = "none"; });
   const c = e.target.closest?.("circle[data-tip]");
@@ -250,6 +287,93 @@ document.addEventListener("pointerdown", e => {
   tip.style.top = (cr.top - wr.top) + "px";
   tip.style.display = "block";
 });
+
+/* ---------- disc-detalj: trend over tid ----------
+   Grupperer kast per økt (kronologisk via sessId/sessTs fra allThrows()) og
+   plotter snitt per økt som en linje. X-aksen er øktrekkefølge, ikke
+   kalenderdato — store pauser mellom økter klemmer da ikke sammen den
+   interessante utviklingen. Gjenbruker samme .scatter/.tip-tap-mønster som
+   spredningskartene, bare med en linje i stedet for et prikk-sky. */
+function sessionTrend(throws, metricFn) {
+  const bySess = new Map();
+  for (const t of throws) {
+    if (!bySess.has(t.sessId)) bySess.set(t.sessId, { ts: t.sessTs, vals: [] });
+    bySess.get(t.sessId).vals.push(metricFn(t));
+  }
+  return [...bySess.values()].sort((a, b) => a.ts - b.ts).map(x => ({ ts: x.ts, v: avgArr(x.vals) }));
+}
+
+function trendCard(color, points, title, unit) {
+  if (!points.length) return "";
+  if (points.length < 2) return `<div class="card mt12"><div class="eyebrow">${title}</div>
+    <p class="sub mt8">Trenden vises når du har data fra minst to økter.</p></div>`;
+
+  const W = 340, H = 170, L = 34, R = 320, T = 14, B = 138;
+  const vals = points.map(p => p.v);
+  const minV = Math.min(...vals), maxV = Math.max(...vals);
+  const pad = (maxV - minV) * 0.2 || Math.max(1, maxV * 0.1);
+  const Y0 = minV - pad, Y1 = maxV + pad;
+  const px = i => L + (i / (points.length - 1)) * (R - L);
+  const py = v => B - ((v - Y0) / (Y1 - Y0)) * (B - T);
+  const step = niceStep(Y1 - Y0, 4);
+
+  let grid = "";
+  for (let g = Math.ceil(Y0 / step) * step; g <= Y1; g += step)
+    grid += `<line x1="${L}" y1="${py(g).toFixed(1)}" x2="${R}" y2="${py(g).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>
+      <text x="${L - 4}" y="${(py(g) + 3.5).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--ink2)">${Math.round(g * 10) / 10}</text>`;
+
+  const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${px(i).toFixed(1)} ${py(p.v).toFixed(1)}`).join(" ");
+  const dots = points.map((p, i) => {
+    const tip = `${fmtDate(p.ts)} · ${fmt1(p.v)} ${unit}`;
+    const cx = px(i).toFixed(1), cy = py(p.v).toFixed(1);
+    return `<circle cx="${cx}" cy="${cy}" r="14" fill="transparent" data-tip="${esc(tip)}"/>
+      <circle cx="${cx}" cy="${cy}" r="4" fill="${color}" stroke="var(--surface)" stroke-width="1.5" style="pointer-events:none"/>`;
+  }).join("");
+
+  return `<div class="card mt12"><div class="eyebrow">${title}</div>
+    <div class="scatter mt8">
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">
+        ${grid}
+        <path d="${path}" fill="none" stroke="${color}" stroke-width="2"/>
+        ${dots}
+      </svg>
+      <div class="tip"></div>
+    </div>
+    <p class="sub mt8">${points.length} økter · trykk et punkt for dato og verdi.</p>
+  </div>`;
+}
+
+function openDiscDetail(discId) {
+  const d = discById(discId);
+  if (!d) return;
+  const all = allThrows().filter(t => t.discId === discId);
+  const L = all.filter(t => t.sm !== "P");
+  const P = all.filter(t => t.sm === "P" && t.td !== undefined);
+  const color = `var(--c${d.ci})`;
+
+  const kpi = `<div class="statrow mt12">
+      <div class="stat"><b class="num">${all.length}</b><span>Kast totalt</span></div>
+      ${L.length ? `<div class="stat"><b class="num">${fmt1(avg(L))}</b><span>Snitt m</span></div>
+        <div class="stat gold"><b class="num">${Math.round(Math.max(...L.map(t => t.dist)))}</b><span>Rekord m</span></div>` : ""}
+      ${P.length ? `<div class="stat"><b class="num">${fmt1(avgArr(P.map(missOf)))}</b><span>Snitt bom m</span></div>
+        <div class="stat gold"><b class="num">${fmt1(Math.min(...P.map(missOf)))}</b><span>Beste m</span></div>` : ""}
+    </div>`;
+
+  $("#sd-body").innerHTML = `
+    <div style="display:flex; align-items:center; gap:12px">
+      ${discIconHTML(d, "discmini")}
+      <div><h2 style="margin:0">${esc(d.navn)}</h2><p class="sub" style="margin:0">${esc(d.type)}</p></div>
+    </div>
+    ${kpi}
+    ${trendCard(color, sessionTrend(L, t => t.dist), "Lengdeutvikling", "m")}
+    ${trendCard(color, sessionTrend(P, missOf), "Presisjonsutvikling", "m bom")}
+    ${L.length ? scatterCard(L, "Spredning — alle lengdekast") : ""}
+    ${P.length ? targetCard(P, "Treffbilde — alle presisjonskast") : ""}
+    <div class="btnrow">
+      <button class="ghost playbtn" data-act="session-close">Lukk</button>
+    </div>`;
+  openModal("m-session");
+}
 
 /* ---------- øktdetalj ---------- */
 /* En runde = ett kast+hent-slag fra ett kastested. Faner («Alle», «R1», «R2» …)
@@ -320,4 +444,6 @@ Object.assign(ACTIONS, {
     sessionRoundSel = arg.slice(i + 1);
     paintSession(arg.slice(0, i));
   },
+  "disc-open": openDiscDetail,
+  "dsort": arg => { discSort = arg; renderStats(); },
 });

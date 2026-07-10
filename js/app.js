@@ -6,7 +6,11 @@ import { renderTrain, resumeSession } from "./session.js";
 import { renderDiscs, seedDefaultDiscs } from "./discs.js";
 import { renderStats } from "./stats.js";
 
-const VERSION = "1.0";
+// VIKTIG: bump VERSION og BUILD ved HVER deploy, sammen med CACHE i sw.js —
+// dette er den enkleste måten å bekrefte på telefonen at man faktisk kjører
+// nyeste versjon etter en oppdatering (se Mer-fanen).
+const VERSION = "1.4";
+const BUILD = "10. juli 2026, 12:10";
 let tab = "train";
 
 /* ---------- faner ---------- */
@@ -54,7 +58,9 @@ function renderMore() {
       <button class="danger playbtn" data-act="wipe" data-arm style="width:100%">Slett all data</button>
     </div>
     <div class="card mt12 center">
-      <p class="sub">Discloggen v${VERSION} · ${allThrows().length} kast logget<br>
+      <p class="sub"><b style="color:var(--ink)">Discloggen v${VERSION}</b><br>
+      Bygget ${BUILD}<br>
+      ${allThrows().length} kast logget<br>
       Installer: Chrome ⋮ → «Installer app» / Safari Del → «Legg til på Hjem-skjerm»</p>
     </div>
     <div style="height:12px"></div>`;

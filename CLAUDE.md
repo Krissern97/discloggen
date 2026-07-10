@@ -16,8 +16,9 @@ men delt i moduler i stedet for én fil.
 index.html      markup + alle modaler
 css/app.css     designsystem: tokens (lys/mørk), komponenter, disc-palett --c0..--c7
 js/app.js       oppstart, faner, Mer-fanen (tema/lyd/testmodus/backup)
-js/util.js      $, ACTIONS + pointerdown-delegering, armConfirm, toast, flash (ikke-
-                blokkerende hurtigresultat), modal, konfetti, applaus, rerender-kobling
+js/util.js      $, ACTIONS + click-delegering (slipp-basert, se «UX-regler»), armConfirm,
+                toast, flash (ikke-blokkerende hurtigresultat), modal, konfetti, applaus,
+                rerender-kobling
 js/state.js     lasting/lagring, S (app-state), undo-stack, eksport/import
 js/geo.js       haversine, peiling, decompose (side/frem), målemodal, simulert GPS
 js/session.js   treningsflyt: økt → runder → kast (pend) → instant landing (throws),
@@ -25,7 +26,8 @@ js/session.js   treningsflyt: økt → runder → kast (pend) → instant landin
 js/discs.js     disc-CRUD + kamerabilde med sirkulær visningsflate (kvadratisk
                 256×256-raster under, se «Bilder»), sår startdiscer ved fersk install
 js/stats.js     KPI-er, spredningskart/målskive (SVG, markørene bruker discens
-                bilde som ikon når det finnes), per-disc, økthistorikk, rundefaner
+                bilde som ikon når det finnes), sorterbar per-disc-oversikt,
+                disc-detalj med trendgrafer, økthistorikk, rundefaner
 sw.js           service worker — BUMP `CACHE`-versjonen ved HVER deploy
 ```
 
@@ -78,13 +80,39 @@ kun synlig ved 2+ runder) — trykk for å bla mellom aggregert og enkelt-runde-
 uten å forlate skjermen (`stats.js`: `openSession` → `paintSession`, styrt av modul-
 variabelen `sessionRoundSel`, handling `"round-sel"`).
 
-## UX-regler (kritiske — fra Dartloggen)
+**Per disc-oversikt** (`perDiscUnifiedHTML`) er sorterbar — Lengde / Presisjon / Totalt
+(`discSort`, handling `"dsort"`). «Totalt» er en komposittscore: snittlengde og
+snittbom normaliseres hver for seg til 0..1 med min-max **relativt til brukerens
+egne discer** (ikke en absolutt fasit), så en kort presisjons-putter og en lang
+driver kan rangeres side om side uten å blande meter-lengde/meter-bom urettferdig.
+Har discen bare én type data, brukes den scoren alene. Trykk en disc-rad →
+**disc-detalj** (`openDiscDetail`): KPI-er, trendgraf for lengde og presisjon hver
+for seg (`trendCard`, snitt **per økt** kronologisk via `sessId`/`sessTs` fra
+`allThrows()` — se `sessionTrend()`), pluss et spredningskart/målskive filtrert til
+kun den ene discen (gjenbruker `scatterCard`/`targetCard`).
 
-- Alle spilleknapper reagerer på **pointerdown**, aldri click (`data-act`-delegering
-  i util.js). `touch-action:none` på spilleknapper (`.playbtn`, `.seg button`).
+## UX-regler
+
+- **Alle knapper reagerer på standard `click` (slipp-basert), IKKE `pointerdown`.**
+  (`data-act`-delegering i util.js.) Dette er bevisst annerledes enn Dartloggen-
+  malen (`APP-OPPSETT-MAL.md`), som brukte pointerdown for maksimal respons i et
+  ikke-skrollende dart-spill. I Discloggen ligger tap-mål ofte i skrollbare lister
+  (øktoversikt, disc-bibliotek, per-disc-liste) — pointerdown fyrer FØR nettleseren
+  vet om brukeren egentlig ville scrolle, som ga falske registreringer midt i en
+  scroll-bevegelse. `click` avbrytes automatisk av nettleseren ved bevegelse
+  (native scroll-vs-tap-disambiguering), akkurat det vi vil ha.
+- `touch-action:manipulation` (IKKE `none`) på alle knapper/spilleknapper
+  (`.playbtn`, `.seg button`, `.roundtabs button`, `.discbtn`, `.colorrow button`)
+  — dobbelttrykk-zoom er avskrudd (ingen 300ms-forsinkelse), men scroll fungerer
+  normalt gjennom dem. Eneste unntak: `#cropwrap` (bilde-beskjæring) beholder
+  `touch-action:none` — det er en dra-for-å-panorere-flate, ikke en knapp, og skal
+  aldri tolkes som sidescroll.
 - Aldri `alert()`/`confirm()` — `data-arm` gir to-trykks bekreftelse.
-- Treningsskjermen scroller aldri (disc-grid scroller internt).
+- Treningsskjermen scroller aldri på øverste nivå (disc-grid scroller internt,
+  nå fritt siden touch-action ikke lenger blokkerer det).
 - Trykk-feedback: gullring + `vibrate(18)` på alle `data-act`-trykk.
+- Kart-tooltip (trykk et punkt for lengde/dato) bruker samme `click`-mønster
+  (egen delegert lytter i stats.js, uavhengig av `data-act`-systemet).
 - Undo (snapshot-stack) på alt som logger data i økten.
 - Norsk språk i hele UI-et. Respekter `prefers-reduced-motion`.
 
@@ -126,6 +154,11 @@ fast rekkefølge, tildeles nye discer som første ledige indeks.
   intet bilde, faller markøren tilbake til en farget prikk (`--c{ci}`) som før.
   Hver markør har i tillegg en usynlig `r=14`-trykkflate (uavhengig av synlig
   ikon-størrelse) for pålitelig trykk-til-lengde på touch — se `markerSVG()`.
+- Samme bilde-eller-fallback-prinsipp gjelder **legenden under kartet**
+  (`legendHTML()`) og **disc-ikonet i per-disc-lista/disc-detaljen**
+  (`discIconHTML()`, CSS-klasse `.discmini`) — bilde med farget ramme (`--dc`),
+  eller en emoji-fallback i en farget sirkel uten bilde. Alle tre bruker samme
+  `--dc:var(--c{ci})`-mønster som resten av appen.
 
 ## Onboarding
 
@@ -139,8 +172,14 @@ for å blokkere.
 
 ## Deploy
 
-1. Endre kode → **bump `CACHE` i `sw.js`** (discloggen-v2, v3 …) → commit → push til `main`.
+1. Endre kode → **bump `CACHE` i `sw.js`** (discloggen-v2, v3 …) **OG `VERSION`/`BUILD`
+   i `js/app.js`** (vises nederst på Mer-siden) → commit → push til `main`.
+   Disse to MÅ bumpes sammen — `VERSION`/`BUILD` er brukerens eneste enkle måte å
+   bekrefte på telefonen at riktig versjon faktisk kjører etter en oppdatering,
+   uten det er lett å glemme (skjedde tidligere i dette prosjektet).
 2. Deploy skjer automatisk via GitHub Actions (`.github/workflows/pages.yml`) —
    IKKE legacy «Deploy from branch»/Jekyll (den hang seg fast ved første forsøk).
    `.nojekyll` i repo-roten sørger for at statiske filer serveres som de er.
 3. App-URL: `https://krissern97.github.io/discloggen/`
+4. Etter oppdatering: brukeren må lukke appen HELT (ikke bare hjemskjerm) og åpne
+   på nytt — service workeren tar noen ganger to runder å aktivere fullt ut.

@@ -112,6 +112,67 @@ const sdR2 = document.getElementById("sd-body").innerHTML;
 assert("runde 2-fane: viser bare rundens eget kast (1 markør)", (sdR2.match(/r="14"/g) || []).length === 1);
 assert("runde 2-fane: den ene discen har bilde", sdR2.includes("<image"));
 
+// --- click-basert trykk (ikke lenger pointerdown) ---
+let fired = 0;
+ACTIONS["__test_click__"] = () => { fired++; };
+const btn = document.createElement("button");
+btn.dataset.act = "__test_click__";
+document.body.appendChild(btn);
+btn.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+assert("pointerdown alene trigger IKKE lenger data-act", fired === 0);
+btn.click();
+assert("click trigger data-act", fired === 1);
+btn.remove();
+delete ACTIONS["__test_click__"];
+
+// --- sorterbar per-disc: komposittscore for "totalt" ---
+S.discs = [
+  { id: "A", navn: "DiscA", type: "Driver", ci: 0, img: null, ark: false, ts: 1 },
+  { id: "B", navn: "DiscB", type: "Putter", ci: 1, img: null, ark: false, ts: 1 },
+  { id: "C", navn: "DiscC", type: "Midrange", ci: 2, img: null, ark: false, ts: 1 },
+];
+const mkL = (discId, dist) => ({ id: "l" + Math.random(), discId, kt: "BH", dist, side: 0, frem: dist, acc: 4, ts: Date.now(), pos: { la: 0, lo: 0 } });
+const mkP2 = (discId, miss) => ({ id: "p" + Math.random(), discId, kt: "BH", dist: 50, side: 0, frem: 50 + miss, td: 50, acc: 4, ts: Date.now(), pos: { la: 0, lo: 0 } });
+S.sessions = [
+  { id: "sl", ts: 1, end: 1, sm: "L", rounds: [{ ts: 1, start: { la: 0, lo: 0 }, aim: { la: 0, lo: 0 }, pend: [], throws: [mkL("A", 100), mkL("B", 50), mkL("C", 75)] }] },
+  { id: "sp", ts: 2, end: 2, sm: "P", rounds: [{ ts: 2, start: { la: 0, lo: 0 }, aim: { la: 0, lo: 0 }, pend: [], throws: [mkP2("A", 20), mkP2("B", 2), mkP2("C", 5)] }] },
+];
+S.cur = null;
+
+// A: lengst (best lengde), dårligst presisjon. B: kortest, best presisjon.
+// C: midt på lengde, nest best presisjon → skal vinne "totalt" (komposittscore 0.667 mot 0.5/0.5).
+// NB: discnavnene dukker først opp i kart-tooltipene (scatter/target) i original
+// kastrekkefølge — så vi må lete etter rekkefølgen KUN inne i selve "Per disc"-
+// listen, ikke i hele siden, for å faktisk teste sorteringen.
+const perDiscSection = () => document.getElementById("v-stats").innerHTML.split(">Per disc<")[1] ?? "";
+
+ACTIONS["dsort"]("totalt");
+let order = ["DiscA", "DiscB", "DiscC"].map(n => perDiscSection().indexOf(n));
+assert("sortering totalt: DiscC (best balanse) kommer først", order[2] < order[0] && order[2] < order[1]);
+
+ACTIONS["dsort"]("lengde");
+order = ["DiscA", "DiscB", "DiscC"].map(n => perDiscSection().indexOf(n));
+assert("sortering lengde: DiscA (lengst) kommer først", order[0] < order[1] && order[0] < order[2]);
+
+ACTIONS["dsort"]("presisjon");
+order = ["DiscA", "DiscB", "DiscC"].map(n => perDiscSection().indexOf(n));
+assert("sortering presisjon: DiscB (minst bom) kommer først", order[1] < order[0] && order[1] < order[2]);
+
+// --- disc-detalj: KPI-er + trendgraf (krever data fra 2+ økter) ---
+const mkL2 = (discId, dist, ts) => ({ id: "l" + Math.random(), discId, kt: "BH", dist, side: 0, frem: dist, acc: 4, ts, pos: { la: 0, lo: 0 } });
+S.discs = [{ id: "X", navn: "Trendisc", type: "Driver", ci: 0, img: null, ark: false, ts: 1 }];
+S.sessions = [
+  { id: "s1", ts: 1000, end: 1000, sm: "L", rounds: [{ ts: 1000, start: { la: 0, lo: 0 }, aim: null, pend: [], throws: [mkL2("X", 60, 1000)] }] },
+  { id: "s2", ts: 2000, end: 2000, sm: "L", rounds: [{ ts: 2000, start: { la: 0, lo: 0 }, aim: null, pend: [], throws: [mkL2("X", 70, 2000)] }] },
+];
+S.cur = null;
+renderStats();
+ACTIONS["disc-open"]("X");
+const dd = document.getElementById("sd-body").innerHTML;
+assert("disc-detalj: viser navn og KPI", dd.includes("Trendisc") && dd.includes("Kast totalt"));
+assert("disc-detalj: trendgraf vises med data fra 2 økter", dd.includes("Lengdeutvikling") && dd.includes("<svg"));
+assert("disc-detalj: trend-punkt har tap-tooltip (r=14)", (dd.match(/r="14"/g) || []).length >= 2);
+
 out.innerHTML += `<div id="sum">${fails ? "FAILS:" + fails : "ALLE TESTER OK"}</div>`;
 </script>
 </body>

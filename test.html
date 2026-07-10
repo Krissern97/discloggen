@@ -10,10 +10,16 @@
 <canvas id="cropcv" width="256" height="256" hidden></canvas>
 <input type="range" id="cropzoom" hidden>
 
+<!-- for stats.js-testene: samme elementer som index.html bruker -->
+<section id="v-stats" style="display:none"></section>
+<div class="modal" id="m-session"><div class="sheet" id="sd-body"></div></div>
+
 <script type="module">
 import { distM, bearing, destination, decompose, demoPoint } from "./js/geo.js";
 import { missOf, S } from "./js/state.js";
 import { seedDefaultDiscs } from "./js/discs.js";
+import { renderStats } from "./js/stats.js";
+import { ACTIONS } from "./js/util.js";
 
 const out = document.getElementById("out");
 let fails = 0;
@@ -67,6 +73,44 @@ assert("seedDefaultDiscs: sår IKKE på nytt når seeded=true (bruker fjernet de
 S.set.seeded = false; S.discs = [{ id: "x", navn: "Egen disc" }];
 seedDefaultDiscs();
 assert("seedDefaultDiscs: rører ikke eksisterende discer selv om seeded var false", S.discs.length === 1 && S.discs[0].id === "x");
+
+// --- statistikk: rundefaner + disc-bilde som kartmarkør ---
+const TINY_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+S.discs = [
+  { id: "d1", navn: "Med bilde", type: "Driver", ci: 0, img: TINY_PNG, ark: false, ts: 1 },
+  { id: "d2", navn: "Uten bilde", type: "Putter", ci: 1, img: null, ark: false, ts: 1 },
+];
+const startA = { la: 59.9139, lo: 10.7522 };
+const aimA = destination(startA, 0, 100);
+const mkThrow = (discId, fwd, side) => {
+  const land = destination(destination(startA, 0, fwd), 90, side);
+  const dd = decompose(startA, aimA, land);
+  return { id: "t" + Math.random(), discId, kt: "BH", dist: dd.dist, side: dd.side, frem: dd.frem, acc: 4, ts: Date.now(), pos: land };
+};
+S.sessions = [{
+  id: "s1", ts: Date.now(), end: Date.now(), sm: "L",
+  rounds: [
+    { ts: Date.now(), start: startA, aim: aimA, pend: [], throws: [mkThrow("d1", 60, 3), mkThrow("d2", 55, -2)] },
+    { ts: Date.now(), start: startA, aim: aimA, pend: [], throws: [mkThrow("d1", 62, 1)] },
+  ],
+}];
+S.cur = null;
+
+renderStats();
+assert("renderStats: kjører uten feil og viser økten", document.getElementById("v-stats").innerHTML.includes("kast"));
+
+ACTIONS["session-open"]("s1");
+const sd = document.getElementById("sd-body").innerHTML;
+assert("øktdetalj: rundefaner vises ved 2+ runder", sd.includes("roundtabs") && sd.includes("Runde 1") && sd.includes("Runde 2"));
+assert("øktdetalj: disc MED bilde får <image>-markør", sd.includes("<image"));
+assert("øktdetalj: disc UTEN bilde faller tilbake til farget prikk", /r="5"\s+fill="var\(--c1\)"/.test(sd));
+assert("øktdetalj: sirkulær klipping (clipPath) er definert", sd.includes('id="discclip"'));
+assert("øktdetalj: alle markører har stor usynlig trykkflate (r=14)", (sd.match(/r="14"/g) || []).length === 3);
+
+ACTIONS["round-sel"]("s1:1");
+const sdR2 = document.getElementById("sd-body").innerHTML;
+assert("runde 2-fane: viser bare rundens eget kast (1 markør)", (sdR2.match(/r="14"/g) || []).length === 1);
+assert("runde 2-fane: den ene discen har bilde", sdR2.includes("<image"));
 
 out.innerHTML += `<div id="sum">${fails ? "FAILS:" + fails : "ALLE TESTER OK"}</div>`;
 </script>

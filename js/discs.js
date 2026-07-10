@@ -1,5 +1,6 @@
-// Disc-biblioteket: legg til/rediger discer med kamerabilde (beskåret helt
-// kvadratisk), type, flight numbers og fast statistikkfarge.
+// Disc-biblioteket: legg til/rediger discer med kamerabilde (sirkulær
+// visningsflate, kvadratisk 256×256-raster under), type, flight numbers og
+// fast statistikkfarge.
 
 import { $, ACTIONS, openModal, closeModal, toast, esc, fmt1, fmtM, rerender, uid } from "./util.js";
 import { S, saveDiscs, saveSet, discById, allThrows, missOf } from "./state.js";
@@ -130,9 +131,11 @@ function deleteDisc() {
   rerender();
 }
 
-/* ---------- kamera + kvadratisk beskjæring ----------
+/* ---------- kamera + sirkulær beskjæring ----------
    <input capture="environment"> åpner kameraet direkte på mobil.
-   Bildet beskjæres til 256×256 JPEG (dra for å flytte, skyv for å zoome). */
+   Rådata beskjæres til et kvadratisk 256×256 JPEG-raster (dra for å flytte,
+   skyv for å zoome); #cropwrap er sirkulær via CSS så brukeren ser/beskjærer
+   sirkulært — samme sirkulære visning brukes overalt bildet vises siden. */
 
 const SIZE = 256;
 let crop = null; // {img, zoom, cx, cy}  cx/cy = midtpunkt i bildekoordinater

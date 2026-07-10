@@ -76,7 +76,7 @@ export function flash(html, extraClass = "") {
   el.innerHTML = html;
   el.className = "show" + (extraClass ? " " + extraClass : "");
   clearTimeout(flashT);
-  flashT = setTimeout(() => el.classList.remove("show"), 1100);
+  flashT = setTimeout(() => el.classList.remove("show"), 1000);
 }
 
 /* ---------- konfetti (110 fallende divs) ---------- */

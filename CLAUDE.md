@@ -22,9 +22,10 @@ js/state.js     lasting/lagring, S (app-state), undo-stack, eksport/import
 js/geo.js       haversine, peiling, decompose (side/frem), målemodal, simulert GPS
 js/session.js   treningsflyt: økt → runder → kast (pend) → instant landing (throws),
                 kontinuerlig GPS-fiks, samme-sted/nytt-sted ny runde
-js/discs.js     disc-CRUD + kamerabilde med kvadratisk beskjæring (256×256 JPEG),
-                sår startdiscer ved fersk install
-js/stats.js     KPI-er, spredningskart (SVG), per-disc, økthistorikk, rundedetaljer
+js/discs.js     disc-CRUD + kamerabilde med sirkulær visningsflate (kvadratisk
+                256×256-raster under, se «Bilder»), sår startdiscer ved fersk install
+js/stats.js     KPI-er, spredningskart/målskive (SVG, markørene bruker discens
+                bilde som ikon når det finnes), per-disc, økthistorikk, rundefaner
 sw.js           service worker — BUMP `CACHE`-versjonen ved HVER deploy
 ```
 
@@ -55,7 +56,8 @@ kastested — f.eks. kast 20 discer, gå og hent dem, det er én runde.
    (`startGpsWatch`/`gpsFix` i session.js). Trykk discen der den ligger → siste kjente
    posisjon brukes **øyeblikkelig** (ingen ventemodal) → `decompose()` gir lengde +
    sideavvik → flyttes til `throws`. Resultatet vises som en ikke-blokkerende
-   `flash()`-boks (~1,1 sek, autoforsvinner, stjeler aldri fokus) — se `util.js`.
+   `flash()`-boks (~1 sek, autoforsvinner, `pointer-events:none` — stjeler ALDRI
+   fokus eller krever et trykk for å lukkes) — se `util.js`.
    Glemt kast tilgis (opprettes implisitt). I P lagres også `td` (avstand
    kastested→mål); bom = `missOf(t)` = avstand fra målet.
 4. «Ny runde»: velg **«Samme sted»** (gjenbruker forrige rundes kastested/mål
@@ -71,8 +73,10 @@ bruker den deliberate `measurePoint`-modalen som venter på god nøyaktighet.
 
 Statistikken holder L og P helt adskilt (snittlengde blandes aldri med presisjonskast),
 og alt kan filtreres på BH/FH. P har eget målskive-kart med avstandsringer.
-I Statistikk-fanen kan man gå økt → rundeliste → enkelt rundes eget kart/treffbilde
-(`stats.js`: `openSession` → `roundsListHTML` → `openRound`).
+I Statistikk-fanen viser øktdetaljen **rundefaner** («Alle» + «Runde 1», «Runde 2» …,
+kun synlig ved 2+ runder) — trykk for å bla mellom aggregert og enkelt-runde-visning
+uten å forlate skjermen (`stats.js`: `openSession` → `paintSession`, styrt av modul-
+variabelen `sessionRoundSel`, handling `"round-sel"`).
 
 ## UX-regler (kritiske — fra Dartloggen)
 
@@ -108,6 +112,20 @@ I Statistikk-fanen kan man gå økt → rundeliste → enkelt rundes eget kart/t
 Alt via CSS-tokens (`--bg`, `--ink`, `--green` …) — aldri hardkodede farger i
 komponenter. Disc-palett `--c0`–`--c7` er CVD-validert i både lys og mørk modus;
 fast rekkefølge, tildeles nye discer som første ledige indeks.
+
+## Bilder
+
+- Disc-bilder lagres alltid som et **kvadratisk** 256×256 JPEG-raster (`d.img`,
+  dataURL) — beskjæringsverktøyet (`js/discs.js`) endrer aldri denne rastergeometrien.
+  «Sirkulær» er en **visningsegenskap**: `#cropwrap` og alle steder bildet vises
+  (`.discbtn img`, `.discrow img`, `.photobox`) er `border-radius:50%`, så brukeren
+  ser/beskjærer alltid sirkulært selv om rådata er kvadratisk under.
+- I spredningskart/målskive (`stats.js`) brukes samme bilde som **markørikon** på
+  kartet via `markerSVG()`: et SVG `<image>` klippet sirkulært med en delt
+  `<clipPath id="discclip">` (definert i hver SVG via `clipDefs()`). Har discen
+  intet bilde, faller markøren tilbake til en farget prikk (`--c{ci}`) som før.
+  Hver markør har i tillegg en usynlig `r=14`-trykkflate (uavhengig av synlig
+  ikon-størrelse) for pålitelig trykk-til-lengde på touch — se `markerSVG()`.
 
 ## Onboarding
 

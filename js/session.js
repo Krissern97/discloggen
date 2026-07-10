@@ -59,9 +59,11 @@ function liveHTML() {
   if (P) {
     const misses = throws.filter(t => t.td !== undefined).map(missOf);
     const snittB = misses.length ? misses.reduce((a, m) => a + m, 0) / misses.length : 0;
+    const avstand = r.aim ? Math.round(distM(r.start, r.aim)) : null;
     kpi = `
+      <div class="stat"><b class="num">${avstand !== null ? avstand : "–"}</b><span>Avstand mål</span></div>
       <div class="stat"><b class="num">${throws.length}</b><span>Kast</span></div>
-      <div class="stat"><b class="num">${misses.length ? fmt1(snittB) : "–"}</b><span>Snitt bom m</span></div>
+      <div class="stat"><b class="num">${misses.length ? fmt1(snittB) : "–"}</b><span>Snitt bom</span></div>
       <div class="stat gold"><b class="num">${misses.length ? fmt1(Math.min(...misses)) : "–"}</b><span>Beste m</span></div>`;
   } else {
     const snitt = throws.length ? throws.reduce((a, t) => a + t.dist, 0) / throws.length : 0;

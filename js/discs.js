@@ -32,18 +32,51 @@ export function seedDefaultDiscs() {
 
 /* ---------- visning ---------- */
 
+/* Sortering: type (fast rekkefølge Putter→Driver), speed (flight-tall, høyest
+   først), lengste (personlig rekord, lengst først) eller presisjon (snitt bom,
+   lavest/best først). Discer uten relevant data for valgt sortering havner sist. */
+let discsSort = "type";
+
+function sortDiscs(list, throws) {
+  const stat = new Map(list.map(d => {
+    const thL = throws.filter(t => t.discId === d.id && t.sm !== "P");
+    const thP = throws.filter(t => t.discId === d.id && t.sm === "P" && t.td !== undefined);
+    return [d.id, {
+      maxDist: thL.length ? Math.max(...thL.map(t => t.dist)) : null,
+      avgMiss: thP.length ? thP.reduce((a, t) => a + missOf(t), 0) / thP.length : null,
+    }];
+  }));
+  const sorters = {
+    type: (a, b) => TYPES.indexOf(a.type) - TYPES.indexOf(b.type) || a.navn.localeCompare(b.navn, "nb"),
+    speed: (a, b) => (b.sp ?? -Infinity) - (a.sp ?? -Infinity),
+    lengste: (a, b) => (stat.get(b.id).maxDist ?? -Infinity) - (stat.get(a.id).maxDist ?? -Infinity),
+    presisjon: (a, b) => (stat.get(a.id).avgMiss ?? Infinity) - (stat.get(b.id).avgMiss ?? Infinity),
+  };
+  return [...list].sort(sorters[discsSort]);
+}
+
+function sortSegHTML() {
+  const opts = [["type", "Type"], ["speed", "Speed"], ["lengste", "Lengste"], ["presisjon", "Presisjon"]];
+  return `<div class="seg mt12">${opts.map(([k, label]) =>
+    `<button class="${discsSort === k ? "on" : ""}" data-act="dlsort" data-arg="${k}">${label}</button>`).join("")}</div>`;
+}
+
 export function renderDiscs() {
   const v = $("#v-discs");
   const throws = allThrows();
-  const act = S.discs.filter(d => !d.ark);
-  const ark = S.discs.filter(d => d.ark);
+  const act = sortDiscs(S.discs.filter(d => !d.ark), throws);
+  const ark = sortDiscs(S.discs.filter(d => d.ark), throws);
 
   const row = d => {
     const thL = throws.filter(t => t.discId === d.id && t.sm !== "P");
     const thP = throws.filter(t => t.discId === d.id && t.sm === "P" && t.td !== undefined);
     const flight = [d.sp, d.gl, d.tu, d.fa].some(x => x !== null && x !== undefined && x !== "")
       ? ` · ${[d.sp, d.gl, d.tu, d.fa].map(x => x ?? "–").join(" / ")}` : "";
-    const mini = thL.length
+    let mini;
+    if (discsSort === "speed") mini = d.sp !== null && d.sp !== undefined ? `<b>${d.sp}</b> speed` : "–";
+    else if (discsSort === "lengste") mini = thL.length ? `<b>${Math.round(Math.max(...thL.map(t => t.dist)))} m</b> lengste` : "ingen kast";
+    else if (discsSort === "presisjon") mini = thP.length ? `<b>${fmt1(thP.reduce((a, t) => a + missOf(t), 0) / thP.length)} m</b> bom` : "ingen kast";
+    else mini = thL.length
       ? `<b>${fmt1(thL.reduce((a, t) => a + t.dist, 0) / thL.length)} m</b>${thL.length + thP.length} kast`
       : thP.length
         ? `<b>${fmt1(thP.reduce((a, t) => a + missOf(t), 0) / thP.length)} m bom</b>${thP.length} kast`
@@ -60,6 +93,7 @@ export function renderDiscs() {
     <div class="eyebrow">Discloggen</div>
     <h1>Discer</h1>
     <button class="primary mt12 playbtn" data-act="add-disc">+ Legg til disc</button>
+    ${act.length > 1 ? sortSegHTML() : ""}
     ${act.length ? act.map(row).join("") : `<div class="card mt12 center"><p class="sub">Ingen discer ennå. Legg til den første — ta gjerne bilde av den, så kjenner du den igjen i treningsmodus.</p></div>`}
     ${ark.length ? `<hr class="sep"><div class="eyebrow">Arkiverte</div>${ark.map(row).join("")}` : ""}
     <div style="height:12px"></div>`;
@@ -199,6 +233,7 @@ $("#cropzoom").addEventListener("input", e => {
 Object.assign(ACTIONS, {
   "add-disc":  () => openDiscModal(null),
   "edit-disc": id => openDiscModal(id),
+  "dlsort":    arg => { discsSort = arg; renderDiscs(); },
   "dm-type":   t => { draft.type = t; paintDiscModal(); },
   "dm-color":  i => { draft.ci = Number(i); paintDiscModal(); },
   "dm-save":   saveDisc,

@@ -10,15 +10,18 @@
 <canvas id="cropcv" width="256" height="256" hidden></canvas>
 <input type="range" id="cropzoom" hidden>
 
-<!-- for stats.js-testene: samme elementer som index.html bruker -->
+<!-- for stats.js/discs.js/session.js-testene: samme elementer som index.html bruker -->
 <section id="v-stats" style="display:none"></section>
+<section id="v-discs" style="display:none"></section>
+<section id="v-train" style="display:none"></section>
 <div class="modal" id="m-session"><div class="sheet" id="sd-body"></div></div>
 
 <script type="module">
 import { distM, bearing, destination, decompose, demoPoint } from "./js/geo.js";
 import { missOf, S } from "./js/state.js";
-import { seedDefaultDiscs } from "./js/discs.js";
+import { seedDefaultDiscs, renderDiscs } from "./js/discs.js";
 import { renderStats } from "./js/stats.js";
+import { renderTrain } from "./js/session.js";
 import { ACTIONS } from "./js/util.js";
 
 const out = document.getElementById("out");
@@ -172,6 +175,69 @@ const dd = document.getElementById("sd-body").innerHTML;
 assert("disc-detalj: viser navn og KPI", dd.includes("Trendisc") && dd.includes("Kast totalt"));
 assert("disc-detalj: trendgraf vises med data fra 2 økter", dd.includes("Lengdeutvikling") && dd.includes("<svg"));
 assert("disc-detalj: trend-punkt har tap-tooltip (r=14)", (dd.match(/r="14"/g) || []).length >= 2);
+
+// --- disc-bibliotek: sortering (type/speed/lengste/presisjon) ---
+S.discs = [
+  { id: "P1", navn: "MinPutter", type: "Putter", sp: 3, ci: 0, img: null, ark: false, ts: 1 },
+  { id: "D1", navn: "MinDriver", type: "Driver", sp: 12, ci: 1, img: null, ark: false, ts: 1 },
+  { id: "M1", navn: "MinMid", type: "Midrange", sp: 5, ci: 2, img: null, ark: false, ts: 1 },
+];
+S.sessions = [
+  { id: "sl2", ts: 1, end: 1, sm: "L", rounds: [{ ts: 1, start: { la: 0, lo: 0 }, aim: { la: 0, lo: 0 }, pend: [], throws: [mkL("D1", 90), mkL("M1", 45), mkL("P1", 20)] }] },
+  { id: "sp2", ts: 2, end: 2, sm: "P", rounds: [{ ts: 2, start: { la: 0, lo: 0 }, aim: { la: 0, lo: 0 }, pend: [], throws: [mkP2("D1", 15), mkP2("M1", 6), mkP2("P1", 1)] }] },
+];
+S.cur = null;
+renderDiscs();
+const discsSection = () => document.getElementById("v-discs").innerHTML;
+
+ACTIONS["dlsort"]("type");
+let dOrder = ["MinPutter", "MinMid", "MinDriver"].map(n => discsSection().indexOf(n));
+assert("disc-sortering type: Putter→Midrange→Driver rekkefølge", dOrder[0] < dOrder[1] && dOrder[1] < dOrder[2]);
+
+ACTIONS["dlsort"]("speed");
+dOrder = ["MinDriver", "MinMid", "MinPutter"].map(n => discsSection().indexOf(n));
+assert("disc-sortering speed: høyest speed (Driver) først", dOrder[0] < dOrder[1] && dOrder[1] < dOrder[2]);
+
+ACTIONS["dlsort"]("lengste");
+dOrder = ["MinDriver", "MinMid", "MinPutter"].map(n => discsSection().indexOf(n));
+assert("disc-sortering lengste: lengste personlig rekord (Driver, 90m) først", dOrder[0] < dOrder[1] && dOrder[1] < dOrder[2]);
+
+ACTIONS["dlsort"]("presisjon");
+dOrder = ["MinPutter", "MinMid", "MinDriver"].map(n => discsSection().indexOf(n));
+assert("disc-sortering presisjon: lavest snittbom (Putter, 1m) først", dOrder[0] < dOrder[1] && dOrder[1] < dOrder[2]);
+
+// --- sikte-strek (throwline) i målskive-kartet ---
+S.discs = [{ id: "X2", navn: "Sikteputter", type: "Putter", ci: 0, img: null, ark: false, ts: 1 }];
+S.sessions = [{
+  id: "sq", ts: 1, end: 1, sm: "P",
+  rounds: [{ ts: 1, start: { la: 0, lo: 0 }, aim: { la: 0, lo: 0 }, pend: [], throws: [mkP2("X2", 3), mkP2("X2", 5)] }],
+}];
+S.cur = null;
+renderStats();
+ACTIONS["disc-open"]("X2");
+const throwLineSame = document.getElementById("sd-body").innerHTML;
+assert("sikte-strek: fast avstand (samme td) vises som enkel strek med tall", throwLineSame.includes("throwline") && throwLineSame.includes("50 m"));
+
+// ulik td på tvers av runder → fallback til snitt-tekst i stedet for (misvisende) strek
+S.sessions[0].rounds.push({ ts: 2, start: { la: 0, lo: 0 }, aim: { la: 0, lo: 0 }, pend: [], throws: [{ ...mkP2("X2", 2), td: 80 }] });
+renderStats();
+ACTIONS["disc-open"]("X2");
+const throwLineDiff = document.getElementById("sd-body").innerHTML;
+assert("sikte-strek: ulik avstand på tvers av runder gir snitt-tekst, ikke misvisende strek", throwLineDiff.includes("snitt avstand til mål") && !throwLineDiff.includes('class="throwline"'));
+
+// --- live presisjonsøkt: «Avstand mål» øverst i KPI-raden ---
+const startB = { la: 59.9, lo: 10.7 };
+const aimB = destination(startB, 0, 42);
+S.cur = { id: "cur1", ts: Date.now(), sm: "P", rounds: [{ ts: Date.now(), start: startB, aim: aimB, pend: [], throws: [] }] };
+renderTrain();
+const live = document.getElementById("v-train").innerHTML;
+assert("live presisjonsøkt: viser «Avstand mål»-stat med riktig verdi", live.includes("Avstand mål") && live.includes(">42<"));
+
+S.cur.rounds[0].aim = null;
+renderTrain();
+const liveNoAim = document.getElementById("v-train").innerHTML;
+assert("live presisjonsøkt: viser «–» for avstand før mål er satt", /Avstand mål/.test(liveNoAim) && liveNoAim.includes(">–<"));
+S.cur = null;
 
 out.innerHTML += `<div id="sum">${fails ? "FAILS:" + fails : "ALLE TESTER OK"}</div>`;
 </script>

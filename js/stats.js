@@ -165,6 +165,22 @@ function markerSVG(cx, cy, d, tip) {
   return hit + mark;
 }
 
+/* enkel sikte-strek: kastested → mål, med avstanden — den «lengdegrafikk»-
+   streken brukeren ba om, men for presisjonskast. Målskive-kartet er zoomet
+   tett inn på selve treffspredningen (ofte bare noen meter bred), mens
+   avstanden til målet gjerne er 30–100+ m — å tegne dem til skala i samme
+   kart ville gjort treffspredningen usynlig liten. Denne streken er derfor
+   et eget, enkelt (ikke skala-riktig langs kartet) diagram med tallet på. */
+function throwLineHTML(P) {
+  const tds = [...new Set(P.map(t => t.td))];
+  if (tds.length === 1) {
+    return `<div class="throwline"><span class="tl-end">📍</span><span class="tl-line"><b>${Math.round(tds[0])} m</b></span><span class="tl-end">🎯</span></div>`;
+  }
+  const avgTd = avgArr(P.map(t => t.td));
+  return `<p class="sub center">📍 → 🎯 snitt avstand til mål: <b style="color:var(--ink)">${fmt1(avgTd)} m</b>
+    (${Math.round(Math.min(...tds))}–${Math.round(Math.max(...tds))} m)</p>`;
+}
+
 /* målskive-kart: landinger relativt til målet, med avstandsringer */
 function targetCard(P, title) {
   const pts = P.map(t => ({ t, x: t.side, y: t.frem - t.td }));
@@ -188,6 +204,7 @@ function targetCard(P, title) {
   const used = [...new Set(P.map(t => t.discId))].map(id => discById(id)).filter(Boolean);
 
   return `<div class="card mt12"><div class="eyebrow">${title}</div>
+    ${throwLineHTML(P)}
     <div class="scatter mt8">
       <svg viewBox="0 0 ${W} ${W}" role="img" aria-label="Treffbilde rundt målet">
         ${clipDefs()}

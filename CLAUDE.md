@@ -24,7 +24,8 @@ js/geo.js       haversine, peiling, decompose (side/frem), målemodal, simulert 
 js/session.js   treningsflyt: økt → runder → kast (pend) → instant landing (throws),
                 kontinuerlig GPS-fiks, samme-sted/nytt-sted ny runde
 js/discs.js     disc-CRUD + kamerabilde med sirkulær visningsflate (kvadratisk
-                256×256-raster under, se «Bilder»), sår startdiscer ved fersk install
+                256×256-raster under, se «Bilder»), sår startdiscer ved fersk install,
+                sorterbar liste (type/speed/lengste/presisjon)
 js/stats.js     KPI-er, spredningskart/målskive (SVG, markørene bruker discens
                 bilde som ikon når det finnes), sorterbar per-disc-oversikt,
                 disc-detalj med trendgrafer, økthistorikk, rundefaner
@@ -51,7 +52,17 @@ To økttyper (`sm`): **Lengdeøkt ("L")** og **Presisjonsøkt ("P")**. En økt i
 kastested — f.eks. kast 20 discer, gå og hent dem, det er én runde.
 
 1. «Start økt» → GPS-måling av kastested (deliberat, `measurePoint`) → siktepunkt
-   (L, valgfritt) / mål (P, påkrevd før landing — f.eks. midt på banen).
+   (L, valgfritt) / mål (P, påkrevd før landing — f.eks. midt på banen). Kastested
+   markeres alltid FØR mål/siktepunkt (bevisst rekkefølge — kastestedet er
+   fundamentet all annen geometri i runden beregnes fra: avstand til mål, sikte-
+   strek, sideavvik osv., så det gir mest mening å sette det først, deretter gå/
+   peke mot der man skal sikte).
+   I P vises **avstand til mål** som egen KPI-stat øverst i live-visningen så
+   snart mål er satt (`Math.round(distM(r.start, r.aim))` i `liveHTML()`), og
+   samme avstand vises som en enkel sikte-strek (📍┄┄┄Xm┄┄┄🎯) over treffbilde-
+   kartet i statistikk (`throwLineHTML()` i stats.js — viser snitt-tekst i stedet
+   for streken hvis flere runder i visningen har ulik avstand til mål, for å
+   unngå en misvisende til-skala-strek).
 2. Modus **Kaster**: velg BH/FH, trykk discen for hvert kast → havner i `pend`
    (rent synkront, ingen GPS involvert — bruker rundens `start`-punkt senere).
 3. Modus **Henter**: GPS kjører kontinuerlig i bakgrunnen gjennom hele økten
@@ -79,6 +90,13 @@ I Statistikk-fanen viser øktdetaljen **rundefaner** («Alle» + «Runde 1», «
 kun synlig ved 2+ runder) — trykk for å bla mellom aggregert og enkelt-runde-visning
 uten å forlate skjermen (`stats.js`: `openSession` → `paintSession`, styrt av modul-
 variabelen `sessionRoundSel`, handling `"round-sel"`).
+
+**Discer-fanen** har sin egen, enklere sortering (`discs.js`: `discsSort`, handling
+`"dlsort"`) — Type (fast rekkefølge Putter→Driver) / Speed (flight-tall) / Lengste
+(personlig rekord) / Presisjon (snitt bom). Ministatistikken i hver rad viser den
+metrikken man faktisk sorterer etter, så rekkefølgen er selvforklarende. Egen greie
+fra Statistikk-fanens `perDiscUnifiedHTML`/`discSort` under — to forskjellige lister
+med to forskjellige formål (bla i biblioteket vs. sammenligne prestasjon).
 
 **Per disc-oversikt** (`perDiscUnifiedHTML`) er sorterbar — Lengde / Presisjon / Totalt
 (`discSort`, handling `"dsort"`). «Totalt» er en komposittscore: snittlengde og

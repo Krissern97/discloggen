@@ -201,5 +201,16 @@ for å blokkere.
    IKKE legacy «Deploy from branch»/Jekyll (den hang seg fast ved første forsøk).
    `.nojekyll` i repo-roten sørger for at statiske filer serveres som de er.
 3. App-URL: `https://krissern97.github.io/discloggen/`
-4. Etter oppdatering: brukeren må lukke appen HELT (ikke bare hjemskjerm) og åpne
-   på nytt — service workeren tar noen ganger to runder å aktivere fullt ut.
+4. **Selvoppdaterende siden v1.8**: GitHub Pages serverer `sw.js` med
+   `Cache-Control: max-age=600` (ingen mulighet å endre dette — statisk host,
+   ingen custom headers) — uten mottiltak kunne nettleseren gå opptil 10 min
+   uten å i det hele tatt sjekke om `sw.js` var endret, og brukeren måtte lukke
+   appen helt (ofte to ganger) for å få oppdateringen. Løst i `index.html`:
+   `register("sw.js", {updateViaCache:"none"})` tvinger sjekken forbi HTTP-
+   cachen, `reg.update()` sjekker med en gang appen åpnes, og en
+   `controllerchange`-lytter reloader siden automatisk ÉN gang når ny versjon
+   tar over — trygt siden pågående økt uansett lagres fortløpende og
+   gjenopprettes (`resumeSession()`). **Denne fiksen bootstrapper seg selv
+   først etter én ordinær (evt. treg) oppdatering** — først når brukeren har
+   fått index.html med denne nye registreringskoden, blir ALLE senere
+   oppdateringer automatiske uten manuell lukk/åpne.

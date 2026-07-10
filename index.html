@@ -132,7 +132,22 @@
 
 <script type="module" src="js/app.js"></script>
 <script>
-if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
+// GitHub Pages serverer sw.js med Cache-Control: max-age=600, så nettleserens
+// egen oppdateringssjekk kan ellers gå opptil 10 min uten å oppdage en ny
+// versjon. updateViaCache:"none" tvinger sjekken forbi HTTP-cachen, reg.update()
+// sjekker med en gang appen åpnes, og et automatisk reload når den nye
+// service workeren tar over gjør at oppdateringer skjer usett — ingen
+// "lukk appen to ganger" nødvendig lenger.
+if ("serviceWorker" in navigator) addEventListener("load", async () => {
+  const reg = await navigator.serviceWorker.register("sw.js", { updateViaCache: "none" });
+  reg.update();
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
+});
 </script>
 </body>
 </html>

@@ -2,15 +2,17 @@
 // hellige etter første deploy — aldri rename uten migreringskode.
 //
 // disc_discs    : [{id, navn, type, sp, gl, tu, fa, ci, img, ark, ts}]
-// disc_sessions : [{id, ts, end, sm, rounds:[{start, aim, pend:[...], throws:[...]}]}]
+// disc_sessions : [{id, ts, end, sm, rounds:[{ts, start, aim, pend:[...], throws:[...]}]}]
 //                 sm: "L" (lengdeøkt) | "P" (presisjonsøkt — aim er målet)
+//                 runde = ett kast+hent-slag fra ett kastested. ts = når runden startet.
 //                 start/aim: {la, lo, acc} | null
 //                 pend:   {id, discId, kt, ts}                  (kastet, ikke hentet)
 //                 throws: {id, discId, kt, dist, side, frem, acc, ts, pos:{la,lo},
 //                          td?}  — td = avstand kastested→mål (kun presisjonskast)
 //                 kt: "BH" | "FH" — side: meter (+høyre/−venstre) | null uten siktepunkt
 // disc_current  : pågående økt (samme form), lagres fortløpende
-// disc_settings : {theme, lyd, kt, demo}
+// disc_settings : {theme, lyd, kt, demo, seeded}
+//                 seeded: true når startdiscer er forsøkt sådd (kun fersk install)
 
 const PREFIX = "disc_";
 
@@ -30,7 +32,7 @@ export const S = {
   discs:    load("discs", []),
   sessions: load("sessions", []),
   cur:      load("current", null),
-  set:      Object.assign({ theme: "auto", lyd: true, kt: "BH", demo: false }, load("settings", {})),
+  set:      Object.assign({ theme: "auto", lyd: true, kt: "BH", demo: false, seeded: false }, load("settings", {})),
   mode: "kast",          // "kast" | "hent" — kun i minnet
 };
 

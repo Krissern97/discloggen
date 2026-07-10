@@ -232,11 +232,22 @@ nav.tabs button.on{color:var(--green); background:var(--green-soft)}
 }
 @keyframes pulse{0%,100%{transform:scale(1); opacity:1}50%{transform:scale(1.7); opacity:.35}}
 
-/* ---------- resultat-overlay ---------- */
-#m-result .sheet{text-align:center}
-#m-result .emoji{font-size:52px; line-height:1.1}
-#m-result .bignum{font-size:clamp(80px,30vw,130px); font-weight:800; line-height:1; font-variant-numeric:tabular-nums}
-#m-result .record{color:var(--gold); font-weight:800; font-size:18px; margin-top:4px}
+/* ---------- hurtigresultat (flash) ----------
+   Ikke-blokkerende, autoforsvinnende popup. pointer-events:none så den
+   aldri stjeler trykk fra skjermen under. */
+#flash{
+  position:fixed; left:50%; top:16%; transform:translate(-50%,-6px);
+  z-index:60; pointer-events:none; max-width:88vw;
+  background:var(--surface); border:2px solid var(--line); border-radius:18px;
+  padding:12px 26px; text-align:center; box-shadow:var(--shadow);
+  opacity:0; transition:opacity .15s ease, transform .15s ease;
+}
+#flash.show{opacity:1; transform:translate(-50%,0)}
+#flash .fv{font-size:40px; font-weight:800; line-height:1.05}
+#flash .fs{font-size:12.5px; color:var(--ink2); font-weight:700; margin-top:2px; white-space:nowrap}
+#flash.record{border-color:var(--gold)}
+#flash.record .fv{color:var(--gold)}
+@media (prefers-reduced-motion: reduce){ #flash{transition:none} }
 
 /* ---------- spredningskart ---------- */
 .scatter{position:relative}

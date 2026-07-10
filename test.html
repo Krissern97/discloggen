@@ -4,9 +4,16 @@
 <body>
 <h1>Selvtest av regnelogikk</h1>
 <div id="out"></div>
+
+<!-- discs.js registrerer lyttere på disse ved import — må finnes i DOM-en -->
+<input type="file" id="f-photo" hidden>
+<canvas id="cropcv" width="256" height="256" hidden></canvas>
+<input type="range" id="cropzoom" hidden>
+
 <script type="module">
-import { distM, bearing, destination, decompose } from "./js/geo.js";
-import { missOf } from "./js/state.js";
+import { distM, bearing, destination, decompose, demoPoint } from "./js/geo.js";
+import { missOf, S } from "./js/state.js";
+import { seedDefaultDiscs } from "./js/discs.js";
 
 const out = document.getElementById("out");
 let fails = 0;
@@ -14,6 +21,10 @@ function ok(name, got, want, tol = 0.5) {
   const pass = Math.abs(got - want) <= tol;
   if (!pass) fails++;
   out.innerHTML += `<div>${pass ? "PASS" : "FAIL"} ${name}: fikk ${got.toFixed(2)}, ventet ${want}</div>`;
+}
+function assert(name, cond) {
+  if (!cond) fails++;
+  out.innerHTML += `<div>${cond ? "PASS" : "FAIL"} ${name}</div>`;
 }
 
 const base = { la: 59.9139, lo: 10.7522 };
@@ -33,11 +44,29 @@ ok("decompose frem", r.frem, 60, 0.2);
 // uten siktepunkt
 const r2 = decompose(base, null, landing);
 ok("uten aim: dist", r2.dist, Math.hypot(60, 5), 0.2);
-out.innerHTML += `<div>${r2.side === null && r2.frem === null ? "PASS" : "FAIL"} uten aim: side/frem er null</div>`;
-if (r2.side !== null) fails++;
+assert("uten aim: side/frem er null", r2.side === null && r2.frem === null);
 
 // presisjon: mål 100 m unna, landing 60 m frem + 5 m til høyre → bom = hypot(5, 40)
 ok("missOf", missOf({ side: r.side, frem: r.frem, td: distM(base, north100) }), Math.hypot(5, 40), 0.3);
+
+// demoPoint er synkron (instant-fiks i testmodus krever ingen await)
+const dp = demoPoint("land");
+assert("demoPoint er synkron og gir la/lo/acc", typeof dp.la === "number" && typeof dp.lo === "number" && typeof dp.acc === "number");
+
+// --- seedDefaultDiscs: kun på fersk install, kun én gang ---
+S.set.seeded = false; S.discs = []; S.sessions = []; S.cur = null;
+seedDefaultDiscs();
+assert("seedDefaultDiscs: sår 4 discer på fersk install", S.discs.length === 4);
+assert("seedDefaultDiscs: setter seeded-flagg", S.set.seeded === true);
+const idsAfterFirstSeed = S.discs.map(d => d.id).join(",");
+
+S.discs = []; // bruker sletter alle discene sine igjen
+seedDefaultDiscs();
+assert("seedDefaultDiscs: sår IKKE på nytt når seeded=true (bruker fjernet dem bevisst)", S.discs.length === 0);
+
+S.set.seeded = false; S.discs = [{ id: "x", navn: "Egen disc" }];
+seedDefaultDiscs();
+assert("seedDefaultDiscs: rører ikke eksisterende discer selv om seeded var false", S.discs.length === 1 && S.discs[0].id === "x");
 
 out.innerHTML += `<div id="sum">${fails ? "FAILS:" + fails : "ALLE TESTER OK"}</div>`;
 </script>

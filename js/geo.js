@@ -125,7 +125,7 @@ Object.assign(ACTIONS, {
 const DEMO_BASE = { la: 59.9139, lo: 10.7522 };
 let demoStart = null;
 
-function demoPoint(kind) {
+export function demoPoint(kind) {
   const jitter = 3;
   const j = p => destination(p, Math.random() * 360, Math.random() * jitter);
   if (kind === "start") {

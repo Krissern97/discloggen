@@ -44,23 +44,10 @@
   </div>
 </div>
 
-<!-- resultat etter landing -->
-<div class="modal" id="m-result">
-  <div class="sheet" data-act="result-close">
-    <div class="emoji" id="res-emoji">🥏</div>
-    <div class="bignum num" id="res-dist">0</div>
-    <div class="eyebrow" id="res-unit">meter</div>
-    <div class="sub mt8" id="res-sub"></div>
-    <div class="record" id="res-record" style="display:none">🏆 Ny rekord!</div>
-    <div class="sub mt12">Trykk for å fortsette</div>
-  </div>
-</div>
-
-<!-- valg av siktepunkt (ny runde / start) -->
+<!-- valg av siktepunkt / ny runde -->
 <div class="modal" id="m-aim">
   <div class="sheet">
-    <h2>Siktepunkt for runden</h2>
-    <p class="sub">Siktelinjen brukes til å beregne hvor langt til venstre/høyre kastene lander. Uten siktepunkt logges bare lengde.</p>
+    <h2 id="aim-title">Siktepunkt for runden</h2>
     <div class="mt12" id="aim-opts"></div>
   </div>
 </div>
@@ -139,6 +126,7 @@
 </div>
 
 <div id="toast"></div>
+<div id="flash"></div>
 <input type="file" id="f-photo" accept="image/*" capture="environment" hidden>
 <input type="file" id="f-import" accept="application/json,.json" hidden>
 

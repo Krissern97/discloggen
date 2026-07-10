@@ -1,11 +1,33 @@
 // Disc-biblioteket: legg til/rediger discer med kamerabilde (beskåret helt
 // kvadratisk), type, flight numbers og fast statistikkfarge.
 
-import { $, ACTIONS, openModal, closeModal, toast, esc, fmt1, fmtM, rerender } from "./util.js";
-import { S, saveDiscs, discById, allThrows, missOf } from "./state.js";
+import { $, ACTIONS, openModal, closeModal, toast, esc, fmt1, fmtM, rerender, uid } from "./util.js";
+import { S, saveDiscs, saveSet, discById, allThrows, missOf } from "./state.js";
 
 const TYPES = ["Putter", "Midrange", "Fairway", "Driver"];
 const NCOLORS = 8;
+
+/* ---------- startdiscer ----------
+   Ved helt fersk installasjon sås fire vanlige discer (én per type) så
+   appen aldri føles tom/låst før man har lagt inn noe selv. Kjøres kun én
+   gang (styrt av set.seeded), så sletter man dem senere kommer de ikke igjen. */
+const DEFAULT_DISCS = [
+  { navn: "Putter",  type: "Putter",   sp: 2,  gl: 3, tu: 0,  fa: 1 },
+  { navn: "Midrange", type: "Midrange", sp: 4,  gl: 4, tu: 0,  fa: 1 },
+  { navn: "Fairway",  type: "Fairway",  sp: 7,  gl: 5, tu: -1, fa: 1 },
+  { navn: "Driver",   type: "Driver",   sp: 10, gl: 5, tu: -1, fa: 2 },
+];
+
+export function seedDefaultDiscs() {
+  if (S.set.seeded) return;
+  S.set.seeded = true;
+  saveSet();
+  if (S.discs.length || S.sessions.length || S.cur) return; // ikke fersk — ikke rør
+  DEFAULT_DISCS.forEach((base, i) => S.discs.push({
+    id: uid(), ...base, ci: i, img: null, ark: false, ts: Date.now(),
+  }));
+  saveDiscs();
+}
 
 /* ---------- visning ---------- */
 

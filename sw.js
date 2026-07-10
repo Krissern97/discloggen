@@ -1,4 +1,4 @@
-const CACHE = "discloggen-v1"; // ← BUMP (v2, v3 …) ved HVER deploy!
+const CACHE = "discloggen-v2"; // ← BUMP (v2, v3 …) ved HVER deploy!
 const FILES = [
   "./", "./index.html", "./manifest.webmanifest",
   "./css/app.css",

@@ -16,13 +16,15 @@ men delt i moduler i stedet for én fil.
 index.html      markup + alle modaler
 css/app.css     designsystem: tokens (lys/mørk), komponenter, disc-palett --c0..--c7
 js/app.js       oppstart, faner, Mer-fanen (tema/lyd/testmodus/backup)
-js/util.js      $, ACTIONS + pointerdown-delegering, armConfirm, toast, modal,
-                konfetti, applaus, rerender-kobling
+js/util.js      $, ACTIONS + pointerdown-delegering, armConfirm, toast, flash (ikke-
+                blokkerende hurtigresultat), modal, konfetti, applaus, rerender-kobling
 js/state.js     lasting/lagring, S (app-state), undo-stack, eksport/import
 js/geo.js       haversine, peiling, decompose (side/frem), målemodal, simulert GPS
-js/session.js   treningsflyt: økt → runder → kast (pend) → landinger (throws)
-js/discs.js     disc-CRUD + kamerabilde med kvadratisk beskjæring (256×256 JPEG)
-js/stats.js     KPI-er, spredningskart (SVG), per-disc, økthistorikk
+js/session.js   treningsflyt: økt → runder → kast (pend) → instant landing (throws),
+                kontinuerlig GPS-fiks, samme-sted/nytt-sted ny runde
+js/discs.js     disc-CRUD + kamerabilde med kvadratisk beskjæring (256×256 JPEG),
+                sår startdiscer ved fersk install
+js/stats.js     KPI-er, spredningskart (SVG), per-disc, økthistorikk, rundedetaljer
 sw.js           service worker — BUMP `CACHE`-versjonen ved HVER deploy
 ```
 
@@ -30,30 +32,47 @@ sw.js           service worker — BUMP `CACHE`-versjonen ved HVER deploy
 
 - `disc_discs`: `[{id, navn, type, sp, gl, tu, fa, ci, img, ark, ts}]`
   — `ci` = fast fargeindeks 0–7, `img` = dataURL 256×256, `ark` = arkivert
-- `disc_sessions`: `[{id, ts, end, rounds:[{start, aim, pend, throws}]}]`
-  — `start`/`aim`: `{la, lo, acc}` | null. `pend`: kastet men ikke hentet
+- `disc_sessions`: `[{id, ts, end, sm, rounds:[{ts, start, aim, pend, throws}]}]`
+  — en **runde** = ett kast+hent-slag fra ett kastested (`ts` = når runden startet).
+  `start`/`aim`: `{la, lo, acc}` | null. `pend`: kastet men ikke hentet
   (`{id, discId, kt, ts}`). `throws`: `{id, discId, kt, dist, side, frem, acc, ts, pos}`.
   `kt` = "BH"/"FH". `side` = meter fra siktelinja (+høyre/−venstre), null uten siktepunkt.
 - `disc_current`: pågående økt, lagres fortløpende (overlever reload)
-- `disc_settings`: `{theme, lyd, kt, demo}`
+- `disc_settings`: `{theme, lyd, kt, demo, seeded}` — `seeded`: startdiscer er forsøkt sådd
+  (kun ved fersk install, se «Onboarding»)
 
 ## Kjerneflyt (treningsmodus)
 
-To økttyper (`sm`): **Lengdeøkt ("L")** og **Presisjonsøkt ("P")**.
+To økttyper (`sm`): **Lengdeøkt ("L")** og **Presisjonsøkt ("P")**. En økt inneholder
+én eller flere **runder** (`S.cur.rounds`); en runde er ett kast+hent-slag fra ett
+kastested — f.eks. kast 20 discer, gå og hent dem, det er én runde.
 
-1. «Start økt» → GPS-måling av kastested → siktepunkt (L, valgfritt) / mål (P, påkrevd
-   før landing — f.eks. midt på banen).
+1. «Start økt» → GPS-måling av kastested (deliberat, `measurePoint`) → siktepunkt
+   (L, valgfritt) / mål (P, påkrevd før landing — f.eks. midt på banen).
 2. Modus **Kaster**: velg BH/FH, trykk discen for hvert kast → havner i `pend`
-3. Modus **Henter**: stå ved discen, trykk den → GPS-måling → `decompose()` gir
-   lengde + sideavvik → flyttes til `throws`. Glemt kast tilgis (opprettes implisitt).
-   I P lagres også `td` (avstand kastested→mål); bom = `missOf(t)` = avstand fra målet.
-4. «Ny runde» ved kast tilbake — forrige kastested tilbys som nytt siktepunkt (L),
-   målet beholdes (P).
+   (rent synkront, ingen GPS involvert — bruker rundens `start`-punkt senere).
+3. Modus **Henter**: GPS kjører kontinuerlig i bakgrunnen gjennom hele økten
+   (`startGpsWatch`/`gpsFix` i session.js). Trykk discen der den ligger → siste kjente
+   posisjon brukes **øyeblikkelig** (ingen ventemodal) → `decompose()` gir lengde +
+   sideavvik → flyttes til `throws`. Resultatet vises som en ikke-blokkerende
+   `flash()`-boks (~1,1 sek, autoforsvinner, stjeler aldri fokus) — se `util.js`.
+   Glemt kast tilgis (opprettes implisitt). I P lagres også `td` (avstand
+   kastested→mål); bom = `missOf(t)` = avstand fra målet.
+4. «Ny runde»: velg **«Samme sted»** (gjenbruker forrige rundes kastested/mål
+   direkte, ingen GPS-venting — for repeterte bøtter fra samme spot, typisk
+   presisjon/putting) eller **«Nytt sted»** (måler nytt kastested via `measurePoint`,
+   deretter samme siktepunkt/mål-valg som ved øktstart).
 5. Rekord (>3 tidligere kast med discen, samme øktmodus) → konfetti + applaus.
    L: lengste kast. P: minste bom.
 
+Kast-registrering (steg 2) og landing (steg 3) er alltid instant/synkron — kun
+kastested/siktepunkt/mål-markering (foundational for hele runden, sjelden handling)
+bruker den deliberate `measurePoint`-modalen som venter på god nøyaktighet.
+
 Statistikken holder L og P helt adskilt (snittlengde blandes aldri med presisjonskast),
 og alt kan filtreres på BH/FH. P har eget målskive-kart med avstandsringer.
+I Statistikk-fanen kan man gå økt → rundeliste → enkelt rundes eget kart/treffbilde
+(`stats.js`: `openSession` → `roundsListHTML` → `openRound`).
 
 ## UX-regler (kritiske — fra Dartloggen)
 
@@ -68,9 +87,20 @@ og alt kan filtreres på BH/FH. P har eget målskive-kart med avstandsringer.
 ## GPS
 
 - Krever HTTPS (Pages) eller localhost — IKKE `file://`. Testmodus i Mer-fanen
-  simulerer GPS for testing innendørs/på PC.
-- Målemodalen samler fikser via `watchPosition` og bruker vektet snitt av de beste;
-  brukeren godkjenner med «Bruk punkt». Advarsel når nøyaktighet > 12 m.
+  simulerer GPS for testing innendørs/på PC (`demoPoint()` i geo.js, kalt synkront
+  for hvert instant-trykk slik at testmodus også føles momentant).
+- To ulike GPS-mønstre, bevisst valgt ulikt:
+  - **Anker-punkter** (kastested/siktepunkt/mål): `measurePoint()` i geo.js —
+    åpner modal, samler fikser via `watchPosition`, vektet snitt av de beste,
+    brukeren godkjenner med «Bruk punkt». Disse punktene definerer hele rundens
+    referanseramme, så presisjon prioriteres over hastighet her.
+  - **Kast/landing** (høyfrekvent, opptil ~40 trykk per runde): kontinuerlig
+    `watchPosition` fra øktstart (`startGpsWatch()` i session.js) holder `gpsFix`
+    oppdatert i bakgrunnen. Et trykk på en disc i hentemodus bruker `gpsFix` direkte,
+    uten å vente — hastighet prioriteres over ceremoni her.
+- GPS-chippen (`gpsChipHTML()`) oppdateres målrettet via `outerHTML`-bytte på hver
+  `watchPosition`-tikk, IKKE full `rerender()` — unngår DOM-churn og bevarer
+  `#flash`-elementet (som ligger utenfor `#v-train` nettopp for å overleve rerender).
 - Wake Lock holder skjermen våken under økt (re-request ved `visibilitychange`).
 
 ## Farger
@@ -79,8 +109,20 @@ Alt via CSS-tokens (`--bg`, `--ink`, `--green` …) — aldri hardkodede farger 
 komponenter. Disc-palett `--c0`–`--c7` er CVD-validert i både lys og mørk modus;
 fast rekkefølge, tildeles nye discer som første ledige indeks.
 
+## Onboarding
+
+Ved helt fersk installasjon (`S.set.seeded` false, ingen discer/økter) sås fire
+standard-discer (én per type) via `seedDefaultDiscs()` i discs.js, kalt fra app.js
+ved oppstart — appen skal aldri føles tom eller låst før brukeren har gjort noe.
+Kjøres kun én gang (flagget settes permanent), så sletter man alle discene senere
+kommer de ikke tilbake. «Start økt»-knappene er aldri disabled, uansett antall
+discer — en tom rundegrid mens man kaster gir en snarvei til Discer-fanen i stedet
+for å blokkere.
+
 ## Deploy
 
-1. Endre kode → **bump `CACHE` i `sw.js`** (discloggen-v2, v3 …) → commit → push.
-2. GitHub Pages: Settings → Pages → Deploy from branch → `main` / root.
-3. App-URL: `https://krissern97.github.io/<repo>/`
+1. Endre kode → **bump `CACHE` i `sw.js`** (discloggen-v2, v3 …) → commit → push til `main`.
+2. Deploy skjer automatisk via GitHub Actions (`.github/workflows/pages.yml`) —
+   IKKE legacy «Deploy from branch»/Jekyll (den hang seg fast ved første forsøk).
+   `.nojekyll` i repo-roten sørger for at statiske filer serveres som de er.
+3. App-URL: `https://krissern97.github.io/discloggen/`

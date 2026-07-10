@@ -154,6 +154,7 @@ function sessionsHTML() {
 }
 
 const avg = th => th.reduce((a, t) => a + t.dist, 0) / th.length;
+const avgArr = xs => xs.reduce((a, x) => a + x, 0) / xs.length;
 const std = xs => {
   const m = xs.reduce((a, x) => a + x, 0) / xs.length;
   return Math.sqrt(xs.reduce((a, x) => a + (x - m) ** 2, 0) / xs.length);
@@ -238,7 +239,7 @@ function openSession(id) {
   const ms = pTh.map(missOf);
   const kpi = P ? `
       <div class="stat"><b class="num">${th.length}</b><span>Kast</span></div>
-      <div class="stat"><b class="num">${ms.length ? fmt1(ms.reduce((a, m) => a + m, 0) / ms.length) : "–"}</b><span>Snitt bom m</span></div>
+      <div class="stat"><b class="num">${ms.length ? fmt1(avgArr(ms)) : "–"}</b><span>Snitt bom m</span></div>
       <div class="stat gold"><b class="num">${ms.length ? fmt1(Math.min(...ms)) : "–"}</b><span>Beste m</span></div>
       <div class="stat"><b class="num">${ms.length ? Math.round(100 * ms.filter(m => m <= 10).length / ms.length) + "%" : "–"}</b><span>Innen 10 m</span></div>` : `
       <div class="stat"><b class="num">${th.length}</b><span>Kast</span></div>
@@ -249,9 +250,62 @@ function openSession(id) {
     <h2>${P ? "🎯 " : ""}${fmtDate(s.ts)} · ${fmtTime(s.ts)}</h2>
     <div class="statrow">${kpi}</div>
     ${P ? (pTh.length ? targetCard(pTh, "Treffbilde denne økten") : "") : scatterCard(th, "Spredning denne økten")}
+    ${roundsListHTML(s)}
     <div class="btnrow">
       <button class="ghost playbtn" data-act="session-close">Lukk</button>
       <button class="danger playbtn" data-act="session-del" data-arg="${s.id}" data-arm>Slett økt</button>
+    </div>`;
+  openModal("m-session");
+}
+
+/* ---------- runder innad i en økt ----------
+   En runde = ett kast+hent-slag fra ett kastested. Listes under øktdetaljen;
+   hver runde kan åpnes for et eget spredningskart/treffbilde. */
+
+function roundSummary(s, r) {
+  const th = r.throws.filter(t => filter === "ALL" || t.kt === filter);
+  if (!th.length) return "0 kast";
+  if (s.sm === "P") {
+    const ms = th.filter(t => t.td !== undefined).map(missOf);
+    return ms.length ? `${th.length} kast · snitt bom ${fmt1(avgArr(ms))} m` : `${th.length} kast`;
+  }
+  return `${th.length} kast · snitt ${fmt1(avg(th))} m`;
+}
+
+function roundsListHTML(s) {
+  return `<div class="card mt12"><div class="eyebrow">Runder</div><ul class="hist">` +
+    s.rounds.map((r, i) => `<li data-act="round-open" data-arg="${s.id}:${i}" style="cursor:pointer">
+        <span class="d">Runde ${i + 1}${r.ts ? ` · ${fmtTime(r.ts)}` : ""}</span>
+        <span class="v num">${roundSummary(s, r)}</span>
+      </li>`).join("") + `</ul></div>`;
+}
+
+function openRound(sessionId, idx) {
+  const s = S.sessions.find(x => x.id === sessionId);
+  if (!s) return;
+  const r = s.rounds[idx];
+  if (!r) return;
+  const P = s.sm === "P";
+  const th = r.throws.filter(t => filter === "ALL" || t.kt === filter);
+  const pTh = P ? th.filter(t => t.td !== undefined) : [];
+  const ms = pTh.map(missOf);
+  const kpi = P ? `
+      <div class="stat"><b class="num">${th.length}</b><span>Kast</span></div>
+      <div class="stat"><b class="num">${ms.length ? fmt1(avgArr(ms)) : "–"}</b><span>Snitt bom m</span></div>
+      <div class="stat gold"><b class="num">${ms.length ? fmt1(Math.min(...ms)) : "–"}</b><span>Beste m</span></div>
+      <div class="stat"><b class="num">${idx + 1}</b><span>Runde</span></div>` : `
+      <div class="stat"><b class="num">${th.length}</b><span>Kast</span></div>
+      <div class="stat"><b class="num">${th.length ? fmt1(avg(th)) : "–"}</b><span>Snitt m</span></div>
+      <div class="stat gold"><b class="num">${th.length ? Math.round(Math.max(...th.map(t => t.dist))) : "–"}</b><span>Maks m</span></div>
+      <div class="stat"><b class="num">${idx + 1}</b><span>Runde</span></div>`;
+  $("#sd-body").innerHTML = `
+    <button class="ghost playbtn" data-act="session-open" data-arg="${s.id}" style="margin-bottom:10px">← Tilbake til økt</button>
+    <h2>${P ? "🎯 " : ""}Runde ${idx + 1} · ${fmtDate(s.ts)}${r.ts ? " · " + fmtTime(r.ts) : ""}</h2>
+    <div class="statrow">${kpi}</div>
+    ${P ? (pTh.length ? targetCard(pTh, "Treffbilde denne runden") : "<p class=\"sub mt8\">Ingen kast med mål satt i denne runden.</p>")
+         : scatterCard(th, "Spredning denne runden")}
+    <div class="btnrow">
+      <button class="ghost playbtn" data-act="session-close">Lukk</button>
     </div>`;
   openModal("m-session");
 }
@@ -266,5 +320,9 @@ Object.assign(ACTIONS, {
     closeModal("m-session");
     toast("Økt slettet");
     rerender();
+  },
+  "round-open": arg => {
+    const i = arg.lastIndexOf(":");
+    openRound(arg.slice(0, i), Number(arg.slice(i + 1)));
   },
 });

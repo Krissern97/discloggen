@@ -3,7 +3,7 @@
 import { $, $$, ACTIONS, setRender, toast } from "./util.js";
 import { S, saveSet, exportJSON, importJSON, wipeAll, allThrows } from "./state.js";
 import { renderTrain, resumeSession } from "./session.js";
-import { renderDiscs } from "./discs.js";
+import { renderDiscs, seedDefaultDiscs } from "./discs.js";
 import { renderStats } from "./stats.js";
 
 const VERSION = "1.0";
@@ -107,6 +107,7 @@ Object.assign(ACTIONS, {
 /* ---------- oppstart ---------- */
 
 setRender(renderAll);
+seedDefaultDiscs();
 applyTheme();
 renderAll();
 resumeSession();

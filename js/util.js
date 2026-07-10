@@ -65,6 +65,20 @@ export function toast(msg) {
   toastT = setTimeout(() => t.classList.remove("show"), 2200);
 }
 
+/* ---------- hurtigresultat (flash) ----------
+   Ikke-blokkerende, autoforsvinnende popup for kastresultater. Stjeler aldri
+   fokus (pointer-events:none) og krever ingen bekreftelse. Ved rask
+   gjentatte trykk (flere discer hentet på rad) bare byttes innholdet og
+   nedtellingen for auto-forsvinn nullstilles — ingen dobbel-blink. */
+let flashT;
+export function flash(html, extraClass = "") {
+  const el = $("#flash");
+  el.innerHTML = html;
+  el.className = "show" + (extraClass ? " " + extraClass : "");
+  clearTimeout(flashT);
+  flashT = setTimeout(() => el.classList.remove("show"), 1100);
+}
+
 /* ---------- konfetti (110 fallende divs) ---------- */
 export function confetti() {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;

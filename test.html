@@ -220,6 +220,11 @@ assert("målskive: stiplet senterlinje (dashed) vises, uten tallverdi på streke
 assert("målskive: trekant for kastested vises (path-element)", /<path d="M [\d.]+ /.test(targetHTML));
 assert("målskive: den gamle avstands-diagram-boksen er fjernet (fjernet etter tilbakemelding)", !targetHTML.includes('class="throwline"'));
 
+// --- øktdetalj (presisjon): «Avstand mål» skal vises som egen KPI-stat ---
+ACTIONS["session-open"]("sq");
+const sessKPI = document.getElementById("sd-body").innerHTML;
+assert("øktdetalj presisjon: viser «Avstand mål»-stat med riktig verdi (50 m)", sessKPI.includes("Avstand mål") && sessKPI.includes(">50<"));
+
 // --- live presisjonsøkt: «Avstand mål» øverst i KPI-raden ---
 const startB = { la: 59.9, lo: 10.7 };
 const aimB = destination(startB, 0, 42);

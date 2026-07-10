@@ -410,11 +410,14 @@ function paintSession(id) {
   const th = throwsRaw.filter(t => filter === "ALL" || t.kt === filter);
   const pTh = P ? th.filter(t => t.td !== undefined) : [];
   const ms = pTh.map(missOf);
+  const tds = pTh.map(t => t.td);
+  const avstand = tds.length ? Math.round(avgArr(tds)) : null; // snitt hvis flere runder/mål; lik verdi for én runde
   const kpi = P ? `
       <div class="stat"><b class="num">${th.length}</b><span>Kast</span></div>
       <div class="stat"><b class="num">${ms.length ? fmt1(avgArr(ms)) : "–"}</b><span>Snitt bom m</span></div>
       <div class="stat gold"><b class="num">${ms.length ? fmt1(Math.min(...ms)) : "–"}</b><span>Beste m</span></div>
-      <div class="stat"><b class="num">${ms.length ? Math.round(100 * ms.filter(m => m <= 10).length / ms.length) + "%" : "–"}</b><span>Innen 10 m</span></div>` : `
+      <div class="stat"><b class="num">${ms.length ? Math.round(100 * ms.filter(m => m <= 10).length / ms.length) + "%" : "–"}</b><span>Innen 10 m</span></div>
+      <div class="stat"><b class="num">${avstand !== null ? avstand : "–"}</b><span>Avstand mål</span></div>` : `
       <div class="stat"><b class="num">${th.length}</b><span>Kast</span></div>
       <div class="stat"><b class="num">${th.length ? fmt1(avg(th)) : "–"}</b><span>Snitt m</span></div>
       <div class="stat gold"><b class="num">${th.length ? Math.round(Math.max(...th.map(t => t.dist))) : "–"}</b><span>Maks m</span></div>

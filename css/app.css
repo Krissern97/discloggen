@@ -248,7 +248,7 @@ nav.tabs button.on{color:var(--green); background:var(--green-soft)}
 }
 .mapmark{font-size:18px; line-height:1; text-align:center; filter:drop-shadow(0 1px 3px rgba(0,0,0,.7))}
 .mapmark-origin{color:#fff; font-size:15px}
-.mapmark-aim{font-size:28px}
+.mapmark-aim{font-size:26px}
 .leaflet-control-attribution{font-size:9px}
 
 /* ---------- hurtigresultat (flash) ----------

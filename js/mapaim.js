@@ -39,7 +39,10 @@ function initMap() {
   }).addTo(map);
 
   marker = L.marker([originPt.la, originPt.lo], {
-    icon: L.divIcon({ className: "", html: '<div class="mapmark mapmark-aim">🎯</div>', iconSize: [30, 30], iconAnchor: [15, 26] }),
+    // tegnestift, ikke dartskive: en pin har et entydig "punkt" (spissen
+    // nederst) som skal treffe koordinaten — en sirkel har ikke det, og
+    // ga inntrykk av at punktet lå et annet sted enn der man faktisk trykket.
+    icon: L.divIcon({ className: "", html: '<div class="mapmark mapmark-aim">📍</div>', iconSize: [28, 28], iconAnchor: [14, 27] }),
     draggable: true,
   }).addTo(map);
   marker.on("drag", updateDist);

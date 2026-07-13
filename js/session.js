@@ -5,7 +5,7 @@
 // En «runde» = ett kast+hent-slag fra ett kastested; «Ny runde» kan enten
 // gjenbruke samme sted (rask, presisjonstrening) eller måle et nytt.
 
-import { $, ACTIONS, openModal, closeModal, toast, flash, confetti, applause, esc, fmtM, fmt1, fmtSide, fmtDate, rerender, uid } from "./util.js";
+import { $, ACTIONS, openModal, closeModal, toast, flash, confetti, applause, esc, fmtM, fmt1, fmtSide, fmtDate, fmtWind, WIND_DIRS, WIND_STRS, rerender, uid } from "./util.js";
 import { S, saveCur, saveSessions, saveSet, snapshot, undo, canUndo, clearUndo, discById, activeDiscs, curRound, allThrows, missOf } from "./state.js";
 import { measurePoint, decompose, distM, demoPoint } from "./geo.js";
 import { pickAimOnMap } from "./mapaim.js";
@@ -86,7 +86,7 @@ function liveHTML() {
   return `
     <div class="row">
       <div><div class="eyebrow">${P ? "🎯 Presisjonsøkt" : "Lengdeøkt"} · runde ${S.cur.rounds.length}</div></div>
-      <div style="display:flex;gap:6px">${gpsChipHTML()}</div>
+      <div style="display:flex;gap:6px">${windChipHTML(r)}${gpsChipHTML()}</div>
     </div>
     <div class="statrow mt8">${kpi}</div>
     <div class="seg mt8">
@@ -117,6 +117,38 @@ function discBtn(d, r, mode) {
   return `<button class="discbtn playbtn" data-act="disc-tap" data-arg="${d.id}" style="--dc:var(--c${d.ci})">
     ${badge ? `<span class="badge num">${badge}</span>` : ""}
     ${img}<b>${esc(d.navn)}</b><small>${esc(d.type)}</small></button>`;
+}
+
+/* ---------- vind for runden ----------
+   Chip til venstre for GPS-chippen — trykk for å logge vindforhold uten at
+   appen noen gang maser om det selv. Retningen er relativ til kasteretningen
+   (den snur når man kaster tilbake), derfor ligger vinden på RUNDEN og arves
+   av neste runde til brukeren endrer den. */
+
+function windChipHTML(r) {
+  const txt = fmtWind(r.wind);
+  return `<button class="chip playbtn ${txt ? "ok" : ""}" data-act="wind-open">🚩 ${txt ?? "Vind"}</button>`;
+}
+
+function paintWindModal() {
+  const w = curRound().wind;
+  $("#wind-dirs").innerHTML = WIND_DIRS.map(([code, label]) =>
+    `<button class="ghost playbtn mt8 ${w?.d === code ? "sel" : ""}" style="width:100%" data-act="wind-dir" data-arg="${code}">${w?.d === code ? "✓ " : ""}${label}</button>`).join("");
+  const strengthVisible = w?.d && w.d !== "stille";
+  $("#wind-str-field").style.display = strengthVisible ? "" : "none";
+  $("#wind-strs").innerHTML = WIND_STRS.map(([val, label]) =>
+    `<button class="${w?.s === val ? "on" : ""}" data-act="wind-str" data-arg="${val}">${label}</button>`).join("");
+}
+
+function setWind(patch) {
+  snapshot();
+  const r = curRound();
+  const w = { ...(r.wind ?? {}), ...patch };
+  if (w.d === "stille") delete w.s;
+  else if (w.d && !w.s) w.s = 2; // fornuftig standard til styrken velges
+  r.wind = w.d ? w : undefined;
+  saveCur();
+  paintWindModal();
 }
 
 /* ---------- GPS-nøyaktighetschip (kontinuerlig, målrettet oppdatering) ---------- */
@@ -267,7 +299,7 @@ function newRoundSame() {
   const prev = curRound();
   closeModal("m-aim");
   snapshot();
-  S.cur.rounds.push({ start: prev.start, aim: prev.aim, pend: [], throws: [], ts: Date.now() });
+  S.cur.rounds.push({ start: prev.start, aim: prev.aim, wind: prev.wind, pend: [], throws: [], ts: Date.now() });
   S.mode = "kast";
   saveCur();
   toast("Ny runde — samme sted 📍");
@@ -276,10 +308,11 @@ function newRoundSame() {
 
 async function newRoundNew() {
   closeModal("m-aim");
+  const prevWind = curRound().wind; // vind arves — endres via chippen når forholdene faktisk endrer seg
   const p = await measurePoint("Merk nytt kastested", "start");
   if (!p) return;
   snapshot();
-  S.cur.rounds.push({ start: p, aim: null, pend: [], throws: [], ts: Date.now() });
+  S.cur.rounds.push({ start: p, aim: null, wind: prevWind, pend: [], throws: [], ts: Date.now() });
   S.mode = "kast";
   saveCur();
   rerender();
@@ -415,4 +448,9 @@ Object.assign(ACTIONS, {
     curRound().aim = rounds[rounds.length - 2].start;
     saveCur(); closeModal("m-aim"); toast("Sikter mot forrige kastested 🎯"); rerender();
   },
+  "wind-open":  () => { paintWindModal(); openModal("m-wind"); },
+  "wind-dir":   d => setWind({ d }),
+  "wind-str":   s => setWind({ s: Number(s) }),
+  "wind-clear": () => { snapshot(); curRound().wind = undefined; saveCur(); closeModal("m-wind"); toast("Vind fjernet"); rerender(); },
+  "wind-close": () => { closeModal("m-wind"); rerender(); },
 });

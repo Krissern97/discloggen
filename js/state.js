@@ -2,10 +2,13 @@
 // hellige etter første deploy — aldri rename uten migreringskode.
 //
 // disc_discs    : [{id, navn, type, sp, gl, tu, fa, ci, img, ark, ts}]
-// disc_sessions : [{id, ts, end, sm, rounds:[{ts, start, aim, pend:[...], throws:[...]}]}]
+// disc_sessions : [{id, ts, end, sm, rounds:[{ts, start, aim, wind?, pend:[...], throws:[...]}]}]
 //                 sm: "L" (lengdeøkt) | "P" (presisjonsøkt — aim er målet)
 //                 runde = ett kast+hent-slag fra ett kastested. ts = når runden startet.
 //                 start/aim: {la, lo, acc} | null
+//                 wind: {d, s} | undefined — d: "mot"|"med"|"hoyre"|"venstre"|"stille",
+//                 s: 1–4 (svak/middels/sterk/orkan, utelates for stille). Per RUNDE
+//                 (ikke økt) siden retningen snur når man kaster tilbake andre veien.
 //                 pend:   {id, discId, kt, ts}                  (kastet, ikke hentet)
 //                 throws: {id, discId, kt, dist, side, frem, acc, ts, pos:{la,lo},
 //                          td?}  — td = avstand kastested→mål (kun presisjonskast)
@@ -62,16 +65,17 @@ export const activeDiscs = () => S.discs.filter(d => !d.ark);
 export const curRound = () => S.cur ? S.cur.rounds[S.cur.rounds.length - 1] : null;
 
 /* Alle fullførte kast på tvers av lagrede økter + pågående, valgfritt filtrert
-   på kasttype. Hvert kast får med øktmodusen (sm = "L"/"P") og en referanse til
-   økten det kom fra (sessId, sessTs) — brukes til å gruppere trendgrafer per
-   økt kronologisk uten å lagre dette redundant i selve kast-objektet. */
+   på kasttype. Hvert kast får med øktmodusen (sm = "L"/"P"), en referanse til
+   økten det kom fra (sessId, sessTs — brukes til å gruppere trendgrafer per
+   økt kronologisk) og rundens vind (wind) — uten å lagre noe av dette
+   redundant i selve kast-objektet. */
 export function allThrows(kt) {
   const sessions = [...S.sessions, ...(S.cur ? [S.cur] : [])];
   const out = [];
   for (const s of sessions)
     for (const r of s.rounds)
       for (const t of r.throws)
-        if (!kt || kt === "ALL" || t.kt === kt) out.push({ ...t, sm: s.sm ?? "L", sessId: s.id, sessTs: s.ts });
+        if (!kt || kt === "ALL" || t.kt === kt) out.push({ ...t, sm: s.sm ?? "L", sessId: s.id, sessTs: s.ts, wind: r.wind });
   return out;
 }
 

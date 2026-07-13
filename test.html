@@ -16,10 +16,13 @@
 <section id="v-train" style="display:none"></section>
 <div class="modal" id="m-session"><div class="sheet" id="sd-body"></div></div>
 <div class="modal" id="m-aim"><div class="sheet"><h2 id="aim-title"></h2><div id="aim-opts"></div></div></div>
+<div class="modal" id="m-wind"><div class="sheet"><div id="wind-dirs"></div><div id="wind-str-field"><div id="wind-strs"></div></div></div></div>
+<div id="toast" style="display:none"></div>
+<div id="flash" style="display:none"></div>
 
 <script type="module">
 import { distM, bearing, destination, decompose, demoPoint } from "./js/geo.js";
-import { missOf, S } from "./js/state.js";
+import { missOf, S, allThrows } from "./js/state.js";
 import { seedDefaultDiscs, renderDiscs } from "./js/discs.js";
 import { renderStats } from "./js/stats.js";
 import { renderTrain } from "./js/session.js";
@@ -249,6 +252,47 @@ await new Promise(r => setTimeout(r, 50));
 const aimOpts = document.getElementById("aim-opts").innerHTML;
 assert("lengdeøkt-siktevalg: «Velg på kart»-alternativ tilbys", aimOpts.includes("Velg på kart"));
 assert("aim-map-handlingen er registrert", typeof ACTIONS["aim-map"] === "function");
+
+// --- vind: chip i live-visning, setting via handlinger, arv til ny runde ---
+renderTrain();
+const liveWind = document.getElementById("v-train").innerHTML;
+assert("vind-chip vises (umerket) til venstre for GPS-chip", liveWind.indexOf('data-act="wind-open"') !== -1 && liveWind.indexOf('data-act="wind-open"') < liveWind.indexOf('id="gps-chip"'));
+
+ACTIONS["wind-dir"]("mot");
+assert("vind-retning settes på runden med standard styrke middels", S.cur.rounds[0].wind?.d === "mot" && S.cur.rounds[0].wind?.s === 2);
+ACTIONS["wind-str"]("4");
+assert("vind-styrke ORKAN settes", S.cur.rounds[0].wind?.s === 4);
+renderTrain();
+assert("vind-chip viser satt vind", document.getElementById("v-train").innerHTML.includes("ORKAN"));
+
+ACTIONS["round-same"]();
+assert("ny runde (samme sted) arver vinden", S.cur.rounds.length === 2 && S.cur.rounds[1].wind?.d === "mot" && S.cur.rounds[1].wind?.s === 4);
+
+ACTIONS["wind-dir"]("stille");
+assert("vindstille fjerner styrken", S.cur.rounds[1].wind?.d === "stille" && S.cur.rounds[1].wind?.s === undefined);
+assert("runde 1 beholder sin egen vind", S.cur.rounds[0].wind?.d === "mot");
+
+// --- vind i statistikk: allThrows kobler vind på, filter + effektkort ---
+const mkW = (fwd) => {
+  const land = destination(destination(S.cur.rounds[0].start, 0, fwd), 90, 0);
+  const dd = decompose(S.cur.rounds[0].start, null, land);
+  return { id: "w" + Math.random(), discId: "dtest", kt: "BH", dist: dd.dist, side: null, frem: null, acc: 4, ts: Date.now(), pos: land };
+};
+S.cur.rounds[0].throws.push(mkW(80));   // runde med motvind/orkan
+S.cur.rounds[1].throws.push(mkW(60));   // runde med vindstille
+const withWind = allThrows();
+assert("allThrows kobler rundens vind på kastet", withWind.some(t => t.wind?.d === "mot") && withWind.some(t => t.wind?.d === "stille"));
+
+renderStats();
+const statsWind = document.getElementById("v-stats").innerHTML;
+assert("vindfilter-seg vises når vind er logget", statsWind.includes('data-act="wfilter"'));
+assert("vind-effekt-kort vises med begge retninger", statsWind.includes("Vind-effekt") && statsWind.includes("Motvind") && statsWind.includes("Vindstille"));
+
+ACTIONS["wfilter"]("mot");
+const statsMot = document.getElementById("v-stats").innerHTML;
+assert("motvind-filter: kun motvind-kastet telles (1 kast, 80 m)", statsMot.includes(">1<") && statsMot.includes(">80<"));
+ACTIONS["wfilter"]("ALL");
+
 S.cur = null;
 S.set.demo = false;
 

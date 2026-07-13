@@ -11,6 +11,35 @@ export const fmtSide = s => Math.abs(s) < 0.5 ? "rett på linja" : `${Math.round
 export const fmtDate = ts => new Date(ts).toLocaleDateString("nb-NO", { weekday: "short", day: "numeric", month: "short" });
 export const fmtTime = ts => new Date(ts).toLocaleTimeString("nb-NO", { hour: "2-digit", minute: "2-digit" });
 
+/* ---------- vind ----------
+   Vind logges per RUNDE (r.wind = {d, s}) — retningen er relativ til
+   kasteretningen (motvind/medvind/side), og den snur jo når man kaster
+   tilbake andre veien i neste runde. d = retningskode, s = styrke 1–4
+   (utelates for vindstille). Ordbøkene her er den ene kilden til
+   etiketter/ikoner for både trenings-chippen og statistikken. */
+export const WIND_DIRS = [
+  //  kode      full etikett             kort     pil (sett fra kasteren, frem = opp)
+  ["mot",     "Motvind",                "Mot",    "↓"],
+  ["med",     "Medvind",                "Med",    "↑"],
+  ["hoyre",   "Sidevind fra høyre",     "Side",   "←"],
+  ["venstre", "Sidevind fra venstre",   "Side",   "→"],
+  ["stille",  "Vindstille",             "Stille", ""],
+];
+export const WIND_STRS = [[1, "Svak"], [2, "Middels"], [3, "Sterk"], [4, "ORKAN"]];
+
+const wdir = d => WIND_DIRS.find(x => x[0] === d);
+export const windDirLabel = d => wdir(d)?.[1] ?? "?";
+export const windStrLabel = s => WIND_STRS.find(x => x[0] === s)?.[1] ?? "";
+
+/* kort tekst for chip/lister: "Mot ↓ sterk", "Side ← ORKAN 🌪️", "Vindstille" */
+export function fmtWind(w) {
+  if (!w || !w.d) return null;
+  if (w.d === "stille") return "Vindstille";
+  const [, , kort, pil] = wdir(w.d) ?? [];
+  const str = w.s === 4 ? "ORKAN 🌪️" : windStrLabel(w.s).toLowerCase();
+  return `${kort} ${pil}${str ? " " + str : ""}`;
+}
+
 /* ---------- handlings-register + click-delegering ----------
    Alle knapper bruker data-act (+ evt. data-arg). Reagerer på standard click
    (slipp-basert): en click avbrytes automatisk av nettleseren hvis fingeren

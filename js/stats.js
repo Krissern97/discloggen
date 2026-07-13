@@ -1,19 +1,33 @@
 // Statistikk: globale KPI-er, spredningskart (SVG), per-disc-oversikt og
-// økthistorikk. Alt kan filtreres på kasttype (alle / backhand / forehand).
+// økthistorikk. Alt kan filtreres på kasttype (alle / backhand / forehand)
+// og på vindforhold (alle / motvind / medvind / sidevind / vindstille).
 
-import { $, ACTIONS, openModal, closeModal, toast, esc, fmtM, fmt1, fmtSide, fmtDate, fmtTime, rerender } from "./util.js";
+import { $, ACTIONS, openModal, closeModal, toast, esc, fmtM, fmt1, fmtSide, fmtDate, fmtTime, fmtWind, windDirLabel, rerender } from "./util.js";
 import { S, saveSessions, discById, allThrows, missOf } from "./state.js";
 
 let filter = "ALL"; // ALL | BH | FH
+let windFilter = "ALL"; // ALL | mot | med | side | stille — "side" matcher både høyre og venstre
 let sessionMap = null;
+
+/* passer kastets rundevind med valgt vindfilter? Kast uten logget vind vises
+   kun under «Alle» — de kan ikke plasseres i en vindkategori. */
+function windMatch(t) {
+  if (windFilter === "ALL") return true;
+  if (!t.wind?.d) return false;
+  if (windFilter === "side") return t.wind.d === "hoyre" || t.wind.d === "venstre";
+  return t.wind.d === windFilter;
+}
 
 /* ---------- hovedvisning ---------- */
 
 export function renderStats() {
   const v = $("#v-stats");
-  const throws = allThrows(filter);
+  const all = allThrows(filter);
+  const throws = all.filter(windMatch);
   const L = throws.filter(t => t.sm !== "P");
   const P = throws.filter(t => t.sm === "P" && t.td !== undefined);
+  const anyWind = all.some(t => t.wind?.d);
+  const wtab = (val, label) => `<button class="${windFilter === val ? "on" : ""}" data-act="wfilter" data-arg="${val}">${label}</button>`;
 
   v.innerHTML = `
     <div class="eyebrow">Discloggen</div>
@@ -23,12 +37,44 @@ export function renderStats() {
       <button class="${filter === "BH" ? "on" : ""}" data-act="sfilter" data-arg="BH">Backhand</button>
       <button class="${filter === "FH" ? "on" : ""}" data-act="sfilter" data-arg="FH">Forehand</button>
     </div>
+    ${anyWind ? `<div class="seg mt8">
+      ${wtab("ALL", "All vind")}${wtab("mot", "Mot")}${wtab("med", "Med")}${wtab("side", "Side")}${wtab("stille", "Stille")}
+    </div>` : ""}
+    ${windFilter !== "ALL" && !throws.length ? `<div class="card mt12 center"><p class="sub">Ingen kast logget i ${windFilter === "side" ? "sidevind" : windFilter === "stille" ? "vindstille" : windFilter + "vind"} ennå.</p></div>` : ""}
     ${kpiHTML(L)}
     ${scatterCard(L, "Spredningskart — lengdekast")}
     ${precisionHTML(P)}
+    ${windFilter === "ALL" ? windEffectHTML(all) : ""}
     ${perDiscUnifiedHTML(L, P)}
     ${sessionsHTML()}
     <div style="height:12px"></div>`;
+}
+
+/* ---------- vind-effekt: hvordan påvirker forholdene kastene dine ----------
+   Vises kun i «All vind»-visningen (i en filtrert visning ER alt samme vind).
+   L-kast: snitt + maks per vindretning. P-kast: snitt bom per vindretning. */
+function windEffectHTML(all) {
+  const winds = ["mot", "med", "hoyre", "venstre", "stille"];
+  const rows = winds.map(d => {
+    const th = all.filter(t => t.wind?.d === d);
+    const L = th.filter(t => t.sm !== "P");
+    const P = th.filter(t => t.sm === "P" && t.td !== undefined);
+    if (!L.length && !P.length) return null;
+    return { d, L, P };
+  }).filter(Boolean);
+  if (rows.length < 2) return ""; // effekt gir først mening med noe å sammenligne mot
+
+  return `<div class="card mt12"><div class="eyebrow">🚩 Vind-effekt</div><ul class="hist">` +
+    rows.map(({ d, L, P }) => {
+      const parts = [];
+      if (L.length) parts.push(`${fmt1(avg(L))} m snitt · maks ${Math.round(Math.max(...L.map(t => t.dist)))}`);
+      if (P.length) parts.push(`${fmt1(avgArr(P.map(missOf)))} m bom`);
+      return `<li>
+        <span class="d">${windDirLabel(d)}<br><small>${L.length + P.length} kast</small></span>
+        <span class="v num" style="font-size:13px">${parts.join("<br>")}</span>
+      </li>`;
+    }).join("") + `</ul>
+    <p class="sub mt8">Snitt per vindretning — logg vind med 🚩-chippen i økta for mer data.</p></div>`;
 }
 
 function kpiHTML(throws) {
@@ -209,6 +255,14 @@ function targetCard(P, title) {
     <p class="sub mt8">Trykk et punkt for å se nøyaktig lengde. Trekanten nederst er kastested.</p></div>`;
 }
 
+/* øktas vind oppsummert: én felles vind → dens etikett, ulik vind mellom
+   runder → «varierende», ingen logget → null */
+function sessionWindText(s) {
+  const winds = [...new Set(s.rounds.map(r => r.wind ? fmtWind(r.wind) : null).filter(Boolean))];
+  if (!winds.length) return null;
+  return winds.length === 1 ? winds[0] : "varierende vind";
+}
+
 function sessionsHTML() {
   if (!S.sessions.length) return "";
   return `<div class="card mt12"><div class="eyebrow">Økter</div><ul class="hist">` +
@@ -217,8 +271,9 @@ function sessionsHTML() {
       const maks = th.length ? Math.max(...th.map(t => t.dist)) : 0;
       const P = s.sm === "P";
       const ms = P ? th.filter(t => t.td !== undefined).map(missOf) : [];
+      const wind = sessionWindText(s);
       return `<li data-act="session-open" data-arg="${s.id}" style="cursor:pointer">
-        <span class="d">${P ? "🎯 " : ""}${fmtDate(s.ts)} · ${fmtTime(s.ts)}</span>
+        <span class="d">${P ? "🎯 " : ""}${fmtDate(s.ts)} · ${fmtTime(s.ts)}${wind ? `<br><small>🚩 ${wind}</small>` : ""}</span>
         <span class="v num">${th.length} kast · ${P
           ? (ms.length ? `snitt bom ${fmt1(ms.reduce((a, m) => a + m, 0) / ms.length)} m` : "–")
           : `maks ${Math.round(maks)} m`}</span>
@@ -432,8 +487,11 @@ function paintSession(id) {
   const hasGps = s.rounds.some(r => r.start && r.start.la) || s.rounds.flatMap(r => r.throws).some(t => t.pos && t.pos.la);
   const mapHtml = hasGps ? `<div id="session-map" style="width:100%; height:260px; border-radius:14px; margin-top:12px; background:var(--surface2); border:1px solid var(--line); box-shadow:var(--shadow);"></div>` : "";
 
+  const windTxt = sel === "ALL" ? sessionWindText(s) : (round?.wind ? fmtWind(round.wind) : null);
+
   $("#sd-body").innerHTML = `
     <h2>${P ? "🎯 " : ""}${title}</h2>
+    ${windTxt ? `<p class="sub" style="margin-top:2px">🚩 ${windTxt}</p>` : ""}
     ${roundTabsHTML(s)}
     <div class="statrow mt12">${kpi}</div>
     ${mapHtml}
@@ -548,6 +606,7 @@ function drawSessionMap(s, sel) {
 
 Object.assign(ACTIONS, {
   "sfilter": arg => { filter = arg; renderStats(); },
+  "wfilter": arg => { windFilter = arg; renderStats(); },
   "session-open": openSession,
   "session-close": () => {
     if (sessionMap) { sessionMap.remove(); sessionMap = null; }

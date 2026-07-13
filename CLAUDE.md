@@ -41,12 +41,13 @@ sw.js           service worker — BUMP `CACHE`-versjonen ved HVER deploy
 
 - `disc_discs`: `[{id, navn, type, sp, gl, tu, fa, ci, img, ark, ts}]`
   — `ci` = fast fargeindeks 0–7, `img` = dataURL 256×256, `ark` = arkivert
-- `disc_sessions`: `[{id, ts, end, sm, rounds:[{ts, start, aim, pend, throws}]}]`
+- `disc_sessions`: `[{id, ts, end, sm, rounds:[{ts, start, aim, wind?, pend, throws}]}]`
   — en **runde** = ett kast+hent-slag fra ett kastested (`ts` = når runden startet).
   `start`/`aim`: `{la, lo, acc}` | null (`acc` er `null` for `aim` satt via
   kartvalg — se «Kartvalg», ellers alltid et GPS-nøyaktighetstall). `pend`: kastet men ikke hentet
   (`{id, discId, kt, ts}`). `throws`: `{id, discId, kt, dist, side, frem, acc, ts, pos}`.
   `kt` = "BH"/"FH". `side` = meter fra siktelinja (+høyre/−venstre), null uten siktepunkt.
+  `wind`: `{d, s}` | undefined — se «Vind».
 - `disc_current`: pågående økt, lagres fortløpende (overlever reload)
 - `disc_settings`: `{theme, lyd, kt, demo, seeded}` — `seeded`: startdiscer er forsøkt sådd
   (kun ved fersk install, se «Onboarding»)
@@ -160,6 +161,27 @@ kun den ene discen (gjenbruker `scatterCard`/`targetCard`).
   `watchPosition`-tikk, IKKE full `rerender()` — unngår DOM-churn og bevarer
   `#flash`-elementet (som ligger utenfor `#v-train` nettopp for å overleve rerender).
 - Wake Lock holder skjermen våken under økt (re-request ved `visibilitychange`).
+
+## Vind
+
+- Logges **per runde** (`r.wind = {d, s}`), IKKE per økt — retningen er relativ
+  til kasteretningen (motvind/medvind/side), og den snur når man kaster tilbake
+  andre veien i en ny runde. `d`: `"mot"|"med"|"hoyre"|"venstre"|"stille"`
+  (hoyre/venstre = sidevind FRA den siden), `s`: 1–4 (svak/middels/sterk/ORKAN,
+  utelates for stille). Ordbøker + `fmtWind()` i util.js er eneste kilde til
+  etiketter/piler.
+- **Aldri prompting**: settes kun via 🚩-chippen (`windChipHTML()` i session.js,
+  til venstre for GPS-chippen) → modal `m-wind` med retningsknapper + styrke-seg.
+  Retningsvalg gir standard styrke «middels» til noe annet velges. Ny runde
+  (både «samme sted» og «nytt sted») **arver forrige rundes vind** — brukeren
+  endrer bare når forholdene faktisk endrer seg.
+- `allThrows()` kobler rundens `wind` på hvert kast (som med `sm`/`sessId`).
+  Statistikk: eget vindfilter-seg (Alle/Mot/Med/Side/Stille — «Side» matcher
+  begge sidene; kast uten logget vind vises kun under «Alle»), vises bare når
+  minst ett kast har vind. «Vind-effekt»-kort (`windEffectHTML`) viser snitt/maks
+  (L) og snitt bom (P) per retning — kun i «All vind»-visning og først når 2+
+  retninger har data. Øktlisten og øktdetaljen viser øktas vind
+  (`sessionWindText`: «varierende vind» hvis rundene spriker).
 
 ## Kartvalg av siktepunkt (lengdeøkt)
 

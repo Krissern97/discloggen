@@ -68,6 +68,27 @@
   </div>
 </div>
 
+<!-- vind for runden -->
+<div class="modal" id="m-wind">
+  <div class="sheet">
+    <h2>🚩 Vind denne runden</h2>
+    <p class="sub">Retningen er sett fra deg som kaster — den følges opp av statistikken,
+    og arves automatisk av neste runde til du endrer den.</p>
+    <div class="field mt12">
+      <label>Retning</label>
+      <div id="wind-dirs"></div>
+    </div>
+    <div class="field" id="wind-str-field">
+      <label>Styrke</label>
+      <div class="seg" id="wind-strs"></div>
+    </div>
+    <div class="btnrow">
+      <button class="ghost playbtn" data-act="wind-clear">Fjern vind</button>
+      <button class="primary playbtn" data-act="wind-close">Ferdig</button>
+    </div>
+  </div>
+</div>
+
 <!-- avslutt økt med manglende landinger -->
 <div class="modal" id="m-end">
   <div class="sheet">

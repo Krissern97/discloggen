@@ -85,6 +85,7 @@ button:disabled{opacity:.45}
   font-size:14px; font-weight:700; min-height:44px; padding:0 14px;
 }
 .danger{background:none; border:1px solid var(--red); color:var(--red); font-size:14px; font-weight:700; min-height:44px; padding:0 14px}
+.ghost.sel{border-color:var(--green); color:var(--green); background:var(--green-soft)}
 .playbtn{touch-action:manipulation}
 
 /* segmentkontroll */

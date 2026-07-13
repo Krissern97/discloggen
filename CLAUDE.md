@@ -6,10 +6,13 @@ men delt i moduler i stedet for én fil.
 
 ## Arkitektur
 
-- **Vanilla JS, ingen byggesteg, ingen eksterne avhengigheter.** ES-moduler rett i
-  nettleseren. Deploy = push til GitHub Pages.
+- **Vanilla JS, ingen byggesteg.** ES-moduler rett i nettleseren. Deploy = push
+  til GitHub Pages.
+- **Eneste eksterne avhengighet: Leaflet** (`vendor/leaflet/`, vendoret lokalt —
+  ikke lastet fra CDN ved kjøretid) for kartvalg av siktepunkt, se «Kartvalg».
+  Alt annet er fortsatt egenskrevet, ingen andre biblioteker/rammeverk.
 - **PWA**: installeres fra Chrome (Android) / Safari (iPhone). Offline via service
-  worker (cache-first).
+  worker (cache-first) — MED ETT unntak, se «Kartvalg».
 - **All data i localStorage** med `disc_`-prefiks. Ingen server, ingen konto.
 
 ```
@@ -29,6 +32,8 @@ js/discs.js     disc-CRUD + kamerabilde med sirkulær visningsflate (kvadratisk
 js/stats.js     KPI-er, spredningskart/målskive (SVG, markørene bruker discens
                 bilde som ikon når det finnes), sorterbar per-disc-oversikt,
                 disc-detalj med trendgrafer, økthistorikk, rundefaner
+js/mapaim.js    kartvalg av siktepunkt (Leaflet + Esri-satellittfliser), se «Kartvalg»
+vendor/leaflet/ Leaflet 1.9.4, vendoret lokalt (ikke CDN)
 sw.js           service worker — BUMP `CACHE`-versjonen ved HVER deploy
 ```
 
@@ -38,7 +43,8 @@ sw.js           service worker — BUMP `CACHE`-versjonen ved HVER deploy
   — `ci` = fast fargeindeks 0–7, `img` = dataURL 256×256, `ark` = arkivert
 - `disc_sessions`: `[{id, ts, end, sm, rounds:[{ts, start, aim, pend, throws}]}]`
   — en **runde** = ett kast+hent-slag fra ett kastested (`ts` = når runden startet).
-  `start`/`aim`: `{la, lo, acc}` | null. `pend`: kastet men ikke hentet
+  `start`/`aim`: `{la, lo, acc}` | null (`acc` er `null` for `aim` satt via
+  kartvalg — se «Kartvalg», ellers alltid et GPS-nøyaktighetstall). `pend`: kastet men ikke hentet
   (`{id, discId, kt, ts}`). `throws`: `{id, discId, kt, dist, side, frem, acc, ts, pos}`.
   `kt` = "BH"/"FH". `side` = meter fra siktelinja (+høyre/−venstre), null uten siktepunkt.
 - `disc_current`: pågående økt, lagres fortløpende (overlever reload)
@@ -154,6 +160,32 @@ kun den ene discen (gjenbruker `scatterCard`/`targetCard`).
   `watchPosition`-tikk, IKKE full `rerender()` — unngår DOM-churn og bevarer
   `#flash`-elementet (som ligger utenfor `#v-train` nettopp for å overleve rerender).
 - Wake Lock holder skjermen våken under økt (re-request ved `visibilitychange`).
+
+## Kartvalg av siktepunkt (lengdeøkt)
+
+- **`js/mapaim.js`** — tredje måte å sette siktepunkt på (i tillegg til fysisk
+  GPS-måling / «forrige kastested»/«behold»): et satellittkart der du trykker
+  eller drar en markør dit du vil sikte, uten å måtte gå dit selv. Kun for
+  **lengdeøkt** — presisjonsøktens mål går fortsatt alltid via fysisk måling
+  (`measurePoint`), siden nøyaktighet der bør prioriteres over hastighet.
+  `pickAimOnMap(origin)` returnerer `Promise<{la,lo,acc:null}|null>`, samme
+  async-mønster som `measurePoint()`, så kalleren i session.js (`aimMap()`)
+  ser lik ut som de andre sikte-valgene.
+- **Leaflet** (vendoret i `vendor/leaflet/`) + **Esri World Imagery**-fliser
+  (gratis, ingen API-nøkkel, hentes fra `server.arcgisonline.com` ved kjøretid).
+  Valgt fremfor Google Maps (krever API-nøkkel + betalingskort-bundet
+  Cloud-konto — bryter med at appen ikke krever konto) og fremfor å åpne
+  telefonens native kartapp (kan ikke bygges inn med trykk-for-å-plassere).
+- **Eneste unntak fra full offline-støtte**: selve kartbibliotek-filene er
+  cachet av service workeren som alt annet, men de FAKTISKE flisbildene
+  (satellittbildene) må hentes fra nett der og da — kan ikke forhåndslagres
+  for ukjente steder. Uten nett viser kartmodalen seg, men uten bilder.
+- Markørene er `L.divIcon` med emoji (▲ for kastested, fast/ikke-flyttbar;
+  🎯 for siktepunktet, drabar + trykk-hvor-som-helst-på-kartet flytter den) —
+  ikke Leaflets standard-markørbilder, så ingen ekstra ikon-filer å vendorere.
+  `#mapaim-map` må ha eksplisitt størrelse FØR `L.map()` initialiseres (ellers
+  blir fliskartet feilberegnet) — derfor venter `pickAimOnMap()` to
+  `requestAnimationFrame`-runder etter `openModal()` før kartet bygges.
 
 ## Farger
 

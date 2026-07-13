@@ -15,6 +15,7 @@
 <section id="v-discs" style="display:none"></section>
 <section id="v-train" style="display:none"></section>
 <div class="modal" id="m-session"><div class="sheet" id="sd-body"></div></div>
+<div class="modal" id="m-aim"><div class="sheet"><h2 id="aim-title"></h2><div id="aim-opts"></div></div></div>
 
 <script type="module">
 import { distM, bearing, destination, decompose, demoPoint } from "./js/geo.js";
@@ -238,6 +239,18 @@ renderTrain();
 const liveNoAim = document.getElementById("v-train").innerHTML;
 assert("live presisjonsøkt: viser «–» for avstand før mål er satt", /Avstand mål/.test(liveNoAim) && liveNoAim.includes(">–<"));
 S.cur = null;
+
+// --- kartvalg av siktepunkt: tilbys ved start av lengdeøkt ---
+S.set.demo = true;
+S.discs = [{ id: "dtest", navn: "Test", type: "Putter", ci: 0, img: null, ark: false, ts: 1 }];
+S.cur = null;
+ACTIONS["start-session"]("L");
+await new Promise(r => setTimeout(r, 50));
+const aimOpts = document.getElementById("aim-opts").innerHTML;
+assert("lengdeøkt-siktevalg: «Velg på kart»-alternativ tilbys", aimOpts.includes("Velg på kart"));
+assert("aim-map-handlingen er registrert", typeof ACTIONS["aim-map"] === "function");
+S.cur = null;
+S.set.demo = false;
 
 out.innerHTML += `<div id="sum">${fails ? "FAILS:" + fails : "ALLE TESTER OK"}</div>`;
 </script>

@@ -8,6 +8,7 @@
 import { $, ACTIONS, openModal, closeModal, toast, flash, confetti, applause, esc, fmtM, fmt1, fmtSide, fmtDate, rerender, uid } from "./util.js";
 import { S, saveCur, saveSessions, saveSet, snapshot, undo, canUndo, clearUndo, discById, activeDiscs, curRound, allThrows, missOf } from "./state.js";
 import { measurePoint, decompose, distM, demoPoint } from "./geo.js";
+import { pickAimOnMap } from "./mapaim.js";
 
 /* ---------- rendering ---------- */
 
@@ -146,8 +147,9 @@ async function startSession(sm) {
   ], "Gå til målet ditt (f.eks. midt på banen) og merk punktet. Hvert kast måles mot dette målet.", "Mål for runden");
   else openAim([
     { act: "aim-new", label: "🎯 Mål siktepunkt nå", primary: true },
+    { act: "aim-map", label: "🗺️ Velg på kart" },
     { act: "aim-none", label: "Senere / uten siktepunkt" },
-  ], "Gå mot målet ditt (eller dit du sikter) og merk punktet. Du kan også gjøre det når du henter discene.", "Siktepunkt for runden");
+  ], "Gå mot målet ditt og merk punktet, velg det på et satellittkart, eller gjør det når du henter discene.", "Siktepunkt for runden");
 }
 
 function endSession() {
@@ -292,6 +294,7 @@ async function newRoundNew() {
     { act: "aim-prev", label: "↩️ Forrige kastested som siktepunkt", primary: true },
     ...(prev.aim ? [{ act: "aim-keep", label: "🎯 Behold forrige siktepunkt" }] : []),
     { act: "aim-new", label: "📍 Mål nytt siktepunkt" },
+    { act: "aim-map", label: "🗺️ Velg på kart" },
     { act: "aim-none", label: "Uten siktepunkt" },
   ], "Kaster du tilbake dit du kom fra, er forrige kastested det naturlige siktepunktet.", "Siktepunkt for ny runde");
 }
@@ -313,6 +316,29 @@ async function aimNew() {
   saveCur();
   recompute(curRound());
   toast(P ? "Mål satt 🎯" : "Siktepunkt satt 🎯");
+  rerender();
+}
+
+/* «Sett siktepunkt»-knappen i lengdeøkt tilbyr i tillegg kartvalg (se
+   mapaim.js); presisjon går uendret rett til fysisk GPS-måling siden mål
+   der som regel bør måles nøyaktig på stedet. */
+function setAimChooser() {
+  if (S.cur.sm === "P") { aimNew(); return; }
+  openAim([
+    { act: "aim-new", label: "🎯 Mål siktepunkt nå", primary: true },
+    { act: "aim-map", label: "🗺️ Velg på kart" },
+  ], "Gå mot siktepunktet og mål det, eller velg det direkte på et satellittkart.", "Siktepunkt for runden");
+}
+
+async function aimMap() {
+  closeModal("m-aim");
+  const r = curRound();
+  const p = await pickAimOnMap(r.start);
+  if (!p) { rerender(); return; }
+  r.aim = p;
+  saveCur();
+  recompute(r);
+  toast("Siktepunkt satt 🗺️");
   rerender();
 }
 
@@ -375,8 +401,9 @@ Object.assign(ACTIONS, {
   "new-round": newRound,
   "round-same": newRoundSame,
   "round-new": newRoundNew,
-  "set-aim": aimNew,
+  "set-aim": setAimChooser,
   "aim-new": aimNew,
+  "aim-map": aimMap,
   "aim-none": () => { closeModal("m-aim"); rerender(); },
   "aim-keep": () => {
     const rounds = S.cur.rounds;

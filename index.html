@@ -11,6 +11,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
@@ -49,6 +50,20 @@
   <div class="sheet">
     <h2 id="aim-title">Siktepunkt for runden</h2>
     <div class="mt12" id="aim-opts"></div>
+  </div>
+</div>
+
+<!-- siktepunkt via satellittkart -->
+<div class="modal" id="m-mapaim">
+  <div class="sheet">
+    <h2 id="mapaim-title">Velg siktepunkt på kartet</h2>
+    <p class="sub">Trykk eller dra markøren dit du vil sikte.</p>
+    <div id="mapaim-map"></div>
+    <div class="row mt8"><span class="sub">Avstand fra kastested</span><span class="v num" id="mapaim-dist">– m</span></div>
+    <div class="btnrow">
+      <button class="ghost playbtn" data-act="mapaim-cancel">Avbryt</button>
+      <button class="primary playbtn" data-act="mapaim-use">Bruk punkt</button>
+    </div>
   </div>
 </div>
 
@@ -130,6 +145,7 @@
 <input type="file" id="f-photo" accept="image/*" capture="environment" hidden>
 <input type="file" id="f-import" accept="application/json,.json" hidden>
 
+<script src="vendor/leaflet/leaflet.js"></script>
 <script type="module" src="js/app.js"></script>
 <script>
 // GitHub Pages serverer sw.js med Cache-Control: max-age=600, så nettleserens

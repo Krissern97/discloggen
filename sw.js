@@ -1,9 +1,10 @@
-const CACHE = "discloggen-v8"; // ← BUMP (v2, v3 …) ved HVER deploy!
+const CACHE = "discloggen-v9"; // ← BUMP (v2, v3 …) ved HVER deploy!
 const FILES = [
   "./", "./index.html", "./manifest.webmanifest",
   "./css/app.css",
   "./js/app.js", "./js/util.js", "./js/state.js", "./js/geo.js",
-  "./js/session.js", "./js/discs.js", "./js/stats.js",
+  "./js/session.js", "./js/discs.js", "./js/stats.js", "./js/mapaim.js",
+  "./vendor/leaflet/leaflet.js", "./vendor/leaflet/leaflet.css",
   "./icon-192.png", "./icon-512.png", "./icon-180.png",
 ];
 self.addEventListener("install", e => {

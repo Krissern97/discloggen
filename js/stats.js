@@ -5,6 +5,7 @@ import { $, ACTIONS, openModal, closeModal, toast, esc, fmtM, fmt1, fmtSide, fmt
 import { S, saveSessions, discById, allThrows, missOf } from "./state.js";
 
 let filter = "ALL"; // ALL | BH | FH
+let sessionMap = null;
 
 /* ---------- hovedvisning ---------- */
 
@@ -426,22 +427,134 @@ function paintSession(id) {
   const chart = P
     ? (pTh.length ? targetCard(pTh, sel === "ALL" ? "Treffbilde denne økten" : "Treffbilde denne runden") : `<p class="sub mt12">Ingen kast med mål satt ${sel === "ALL" ? "i denne økten" : "i denne runden"}.</p>`)
     : scatterCard(th, sel === "ALL" ? "Spredning denne økten" : "Spredning denne runden");
+
+  if (sessionMap) { sessionMap.remove(); sessionMap = null; }
+  const hasGps = s.rounds.some(r => r.start && r.start.la) || s.rounds.flatMap(r => r.throws).some(t => t.pos && t.pos.la);
+  const mapHtml = hasGps ? `<div id="session-map" style="width:100%; height:260px; border-radius:14px; margin-top:12px; background:var(--surface2); border:1px solid var(--line); box-shadow:var(--shadow);"></div>` : "";
+
   $("#sd-body").innerHTML = `
     <h2>${P ? "🎯 " : ""}${title}</h2>
     ${roundTabsHTML(s)}
     <div class="statrow mt12">${kpi}</div>
+    ${mapHtml}
     ${chart}
     <div class="btnrow">
       <button class="ghost playbtn" data-act="session-close">Lukk</button>
       <button class="danger playbtn" data-act="session-del" data-arg="${s.id}" data-arm>Slett økt</button>
     </div>`;
+
+  if (hasGps) {
+    requestAnimationFrame(() => requestAnimationFrame(() => drawSessionMap(s, sel)));
+  }
+}
+
+function drawSessionMap(s, sel) {
+  const mapEl = $("#session-map");
+  if (!mapEl) return;
+  if (sessionMap) { sessionMap.remove(); sessionMap = null; }
+
+  const roundsToDraw = sel === "ALL" ? s.rounds : [s.rounds[Number(sel)]].filter(Boolean);
+  const coords = [];
+
+  sessionMap = L.map("session-map", { attributionControl: true });
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    maxZoom: 20,
+    attribution: "Esri, Maxar, Earthstar Geographics",
+  }).addTo(sessionMap);
+
+  roundsToDraw.forEach((r, rIdx) => {
+    const roundNum = sel === "ALL" ? rIdx + 1 : Number(sel) + 1;
+
+    // Startpunkt
+    if (r.start && r.start.la && r.start.lo) {
+      coords.push([r.start.la, r.start.lo]);
+      const startText = sel === "ALL" ? `R${roundNum} ▲` : `▲ Kastested`;
+      const size = sel === "ALL" ? [40, 20] : [80, 20];
+      const anchor = sel === "ALL" ? [20, 10] : [40, 10];
+      L.marker([r.start.la, r.start.lo], {
+        icon: L.divIcon({
+          className: "",
+          html: `<div class="mapmark mapmark-origin" style="background: var(--ink); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; white-space: nowrap; border: 1px solid var(--line); box-shadow: 0 1px 3px rgba(0,0,0,0.4);">${startText}</div>`,
+          iconSize: size,
+          iconAnchor: anchor
+        }),
+        interactive: false
+      }).addTo(sessionMap);
+    }
+
+    // Siktepunkt/mål
+    if (r.aim && r.aim.la && r.aim.lo) {
+      coords.push([r.aim.la, r.aim.lo]);
+      const isP = s.sm === "P";
+      L.marker([r.aim.la, r.aim.lo], {
+        icon: L.divIcon({
+          className: "",
+          html: `<div class="mapmark" style="font-size: 22px; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));">${isP ? "🎯" : "📍"}</div>`,
+          iconSize: [28, 28],
+          iconAnchor: isP ? [14, 14] : [14, 27]
+        })
+      }).addTo(sessionMap).bindPopup(isP ? `Runde ${roundNum}: Mål` : `Runde ${roundNum}: Siktepunkt`);
+
+      // Siktelinje
+      if (r.start && r.start.la && r.start.lo) {
+        L.polyline([
+          [r.start.la, r.start.lo],
+          [r.aim.la, r.aim.lo]
+        ], {
+          color: "var(--ink2)",
+          weight: 1.5,
+          dashArray: "4, 6",
+          opacity: 0.8
+        }).addTo(sessionMap);
+      }
+    }
+
+    // Kast
+    const throwsToDraw = r.throws.filter(t => filter === "ALL" || t.kt === filter);
+    throwsToDraw.forEach(t => {
+      if (t.pos && t.pos.la && t.pos.lo) {
+        coords.push([t.pos.la, t.pos.lo]);
+        const d = discById(t.discId);
+        const ringColor = `var(--c${d?.ci ?? 0})`;
+        const imgHtml = d?.img
+          ? `<div class="mapmark-throw" style="--dc:${ringColor}; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--dc); background-image: url(${d.img}); background-size: cover; box-shadow: 0 1px 3px rgba(0,0,0,0.5);"></div>`
+          : `<div class="mapmark-throw ph" style="--dc:${ringColor}; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--dc); background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; box-shadow: 0 1px 3px rgba(0,0,0,0.5);">🥏</div>`;
+
+        const popupText = `
+          <strong>${esc(d?.navn ?? "Ukjent disc")}</strong> (${esc(d?.type ?? "Putter")})<br>
+          Kast: ${Math.round(t.dist)} m · ${t.kt}<br>
+          ${t.side !== null ? `Avvik: ${fmtSide(t.side)}<br>` : ""}
+          ${s.sm === "P" ? `Fra mål: ${fmt1(missOf(t))} m` : ""}
+        `;
+
+        L.marker([t.pos.la, t.pos.lo], {
+          icon: L.divIcon({
+            className: "",
+            html: imgHtml,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11]
+          })
+        }).addTo(sessionMap).bindPopup(popupText);
+      }
+    });
+  });
+
+  if (coords.length > 0) {
+    sessionMap.fitBounds(coords, { padding: [30, 30] });
+  } else {
+    sessionMap.setView([59.9139, 10.7522], 13);
+  }
 }
 
 Object.assign(ACTIONS, {
   "sfilter": arg => { filter = arg; renderStats(); },
   "session-open": openSession,
-  "session-close": () => closeModal("m-session"),
+  "session-close": () => {
+    if (sessionMap) { sessionMap.remove(); sessionMap = null; }
+    closeModal("m-session");
+  },
   "session-del": id => {
+    if (sessionMap) { sessionMap.remove(); sessionMap = null; }
     S.sessions = S.sessions.filter(x => x.id !== id);
     saveSessions();
     closeModal("m-session");

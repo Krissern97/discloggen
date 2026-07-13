@@ -42,6 +42,7 @@
       <button class="ghost playbtn" data-act="measure-retry">Mål på nytt</button>
       <button class="primary playbtn" id="ms-use" data-act="measure-use" disabled>Bruk punkt</button>
     </div>
+    <button class="ghost playbtn mt8" data-act="measure-map" style="width:100%">🗺️ Velg på kart</button>
   </div>
 </div>
 
@@ -57,9 +58,9 @@
 <div class="modal" id="m-mapaim">
   <div class="sheet">
     <h2 id="mapaim-title">Velg siktepunkt på kartet</h2>
-    <p class="sub">Trykk eller dra markøren dit du vil sikte.</p>
+    <p class="sub" id="mapaim-hint">Trykk eller dra markøren dit du vil sikte.</p>
     <div id="mapaim-map"></div>
-    <div class="row mt8"><span class="sub">Avstand fra kastested</span><span class="v num" id="mapaim-dist">– m</span></div>
+    <div class="row mt8" id="mapaim-dist-row"><span class="sub">Avstand fra kastested</span><span class="v num" id="mapaim-dist">– m</span></div>
     <div class="btnrow">
       <button class="ghost playbtn" data-act="mapaim-cancel">Avbryt</button>
       <button class="primary playbtn" data-act="mapaim-use">Bruk punkt</button>

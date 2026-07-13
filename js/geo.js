@@ -58,7 +58,7 @@ export function measurePoint(title, kind = "land") {
     $("#ms-hint").textContent = "Venter på GPS-signal … stå i ro.";
     $("#ms-use").disabled = true;
     openModal("m-measure");
-    meas = { samples: [], resolve, watchId: startWatch() };
+    meas = { samples: [], resolve, watchId: startWatch(), kind };
   });
 }
 
@@ -118,6 +118,34 @@ Object.assign(ACTIONS, {
     $("#ms-acc").className = "acc num";
     $("#ms-use").disabled = true;
     meas.watchId = startWatch();
+  },
+  "measure-map": async () => {
+    if (!meas) return;
+    const title = $("#ms-title").textContent;
+    const kind = meas.kind;
+    const samples = meas.samples;
+    const center = samples.length ? best(samples) : null;
+    const resolve = meas.resolve;
+    if (meas.watchId !== null) navigator.geolocation.clearWatch(meas.watchId);
+    meas = null;
+    closeModal("m-measure");
+    if (kind === "start") {
+      const { pickStartOnMap } = await import("./mapaim.js");
+      const result = await pickStartOnMap(title, center);
+      resolve(result);
+    } else {
+      const r = curRound();
+      const origin = r ? r.start : null;
+      if (origin) {
+        const { pickAimOnMap } = await import("./mapaim.js");
+        const result = await pickAimOnMap(origin);
+        resolve(result);
+      } else {
+        const { pickStartOnMap } = await import("./mapaim.js");
+        const result = await pickStartOnMap(title, center);
+        resolve(result);
+      }
+    }
   },
 });
 

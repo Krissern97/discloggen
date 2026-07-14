@@ -37,6 +37,7 @@
     <div class="pulse"></div>
     <div class="acc num" id="ms-acc">–</div>
     <div class="sub" id="ms-hint">Venter på GPS-signal …</div>
+    <div id="ms-map"></div>
     <div class="btnrow">
       <button class="ghost playbtn" data-act="measure-cancel">Avbryt</button>
       <button class="ghost playbtn" data-act="measure-retry">Mål på nytt</button>
@@ -63,7 +64,20 @@
     <div class="row mt8" id="mapaim-dist-row"><span class="sub">Avstand fra kastested</span><span class="v num" id="mapaim-dist">– m</span></div>
     <div class="btnrow">
       <button class="ghost playbtn" data-act="mapaim-cancel">Avbryt</button>
-      <button class="primary playbtn" data-act="mapaim-use">Bruk punkt</button>
+      <button class="primary playbtn" id="mapaim-use-btn" data-act="mapaim-use">Bruk punkt</button>
+    </div>
+  </div>
+</div>
+
+<!-- disc-utvalg for økten -->
+<div class="modal" id="m-discsel">
+  <div class="sheet">
+    <h2 id="discsel-title">Velg discer for økten</h2>
+    <p class="sub">Du kan endre utvalget når som helst under trening.</p>
+    <div class="mt12" id="discsel-list"></div>
+    <div class="btnrow">
+      <button class="ghost playbtn" data-act="discsel-all">Velg alle</button>
+      <button class="primary playbtn" data-act="discsel-done">Ferdig</button>
     </div>
   </div>
 </div>

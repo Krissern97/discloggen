@@ -5,7 +5,7 @@
 import { $, ACTIONS, openModal, closeModal, toast, esc, fmt1, fmtM, rerender, uid } from "./util.js";
 import { S, saveDiscs, saveSet, discById, allThrows, missOf } from "./state.js";
 
-const TYPES = ["Putter", "Midrange", "Fairway", "Driver"];
+export const TYPES = ["Putter", "Midrange", "Fairway", "Driver"];
 const NCOLORS = 8;
 
 /* ---------- startdiscer ----------

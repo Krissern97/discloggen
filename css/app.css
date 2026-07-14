@@ -173,6 +173,7 @@ button:disabled{opacity:.45}
 .discrow .info small{font-size:12px; color:var(--ink2)}
 .discrow .mini{text-align:right; font-size:12px; color:var(--ink2); flex-shrink:0}
 .discrow .mini b{display:block; font-size:15px; color:var(--ink); font-variant-numeric:tabular-nums}
+.discrow.sel{border-color:var(--green); background:var(--green-soft)}
 
 /* ---------- faner nederst ---------- */
 nav.tabs{
@@ -247,9 +248,17 @@ nav.tabs button.on{color:var(--green); background:var(--green-soft)}
   width:100%; height:min(50dvh,420px); border-radius:14px; overflow:hidden;
   margin-top:10px; background:var(--surface2);
 }
+/* liten, passiv (ikke pan/zoom) kart-forhåndsvisning i GPS-målemodalen —
+   bekrefter visuelt at GPS-en faktisk plasserer deg der du står */
+#ms-map{width:100%; height:120px; border-radius:12px; overflow:hidden; margin-top:10px; background:var(--surface2)}
+#ms-map:empty{display:none}
 .mapmark{font-size:18px; line-height:1; text-align:center; filter:drop-shadow(0 1px 3px rgba(0,0,0,.7))}
 .mapmark-origin{color:#fff; font-size:15px}
 .mapmark-aim{font-size:26px}
+.mapmark-live{
+  width:14px; height:14px; border-radius:50%; background:#2b8cff;
+  border:2px solid #fff; box-shadow:0 0 0 5px rgba(43,140,255,.32), 0 1px 3px rgba(0,0,0,.5);
+}
 .leaflet-control-attribution{font-size:9px}
 
 /* ---------- hurtigresultat (flash) ----------

@@ -8,9 +8,10 @@ men delt i moduler i stedet for én fil.
 
 - **Vanilla JS, ingen byggesteg.** ES-moduler rett i nettleseren. Deploy = push
   til GitHub Pages.
-- **Eneste eksterne avhengighet: Leaflet** (`vendor/leaflet/`, vendoret lokalt —
-  ikke lastet fra CDN ved kjøretid) for kartvalg av siktepunkt, se «Kartvalg».
-  Alt annet er fortsatt egenskrevet, ingen andre biblioteker/rammeverk.
+- **Eksterne avhengigheter: Leaflet** (`vendor/leaflet/`, vendoret lokalt — ikke
+  lastet fra CDN ved kjøretid) for kartvalg, se «Kartvalg», **+ Open-Meteo** for
+  live vær, se «Vær» — begge gratis, ingen API-nøkkel/konto. Alt annet er
+  fortsatt egenskrevet, ingen andre biblioteker/rammeverk.
 - **PWA**: installeres fra Chrome (Android) / Safari (iPhone). Offline via service
   worker (cache-first) — MED ETT unntak, se «Kartvalg».
 - **All data i localStorage** med `disc_`-prefiks. Ingen server, ingen konto.
@@ -23,16 +24,21 @@ js/util.js      $, ACTIONS + click-delegering (slipp-basert, se «UX-regler»), 
                 toast, flash (ikke-blokkerende hurtigresultat), modal, konfetti, applaus,
                 rerender-kobling
 js/state.js     lasting/lagring, S (app-state), undo-stack, eksport/import
-js/geo.js       haversine, peiling, decompose (side/frem), målemodal, simulert GPS
-js/session.js   treningsflyt: økt → runder → kast (pend) → instant landing (throws),
-                kontinuerlig GPS-fiks, samme-sted/nytt-sted ny runde
+js/geo.js       haversine, peiling, decompose (side/frem), målemodal (med live GPS-
+                minikart, se «GPS»), simulert GPS
+js/session.js   treningsflyt: økt → disc-utvalg → runder → kast (pend) → instant
+                landing (throws), kontinuerlig GPS-fiks, samme-sted/nytt-sted ny
+                runde, «Kast alle», vind-chip, vær-chip, live kart underveis
 js/discs.js     disc-CRUD + kamerabilde med sirkulær visningsflate (kvadratisk
                 256×256-raster under, se «Bilder»), sår startdiscer ved fersk install,
                 sorterbar liste (type/speed/lengste/presisjon)
 js/stats.js     KPI-er, spredningskart/målskive (SVG, markørene bruker discens
-                bilde som ikon når det finnes), sorterbar per-disc-oversikt,
-                disc-detalj med trendgrafer, økthistorikk, rundefaner
-js/mapaim.js    kartvalg av siktepunkt (Leaflet + Esri-satellittfliser), se «Kartvalg»
+                bilde som ikon når det finnes, valgfritt varmekart), disctype-filter,
+                sorterbar per-disc-oversikt, disc-detalj med trendgrafer,
+                økthistorikk, rundefaner, vindfilter
+js/mapaim.js    kartvalg: siktepunkt/mål, startpunkt, og «se/juster kart underveis
+                i økten» (Leaflet + Esri-satellittfliser), se «Kartvalg»
+js/weather.js   live værdata under trening (Open-Meteo), se «Vær»
 vendor/leaflet/ Leaflet 1.9.4, vendoret lokalt (ikke CDN)
 sw.js           service worker — BUMP `CACHE`-versjonen ved HVER deploy
 ```
@@ -48,7 +54,10 @@ sw.js           service worker — BUMP `CACHE`-versjonen ved HVER deploy
   (`{id, discId, kt, ts}`). `throws`: `{id, discId, kt, dist, side, frem, acc, ts, pos}`.
   `kt` = "BH"/"FH". `side` = meter fra siktelinja (+høyre/−venstre), null uten siktepunkt.
   `wind`: `{d, s}` | undefined — se «Vind».
-- `disc_current`: pågående økt, lagres fortløpende (overlever reload)
+- `disc_current`: pågående økt, lagres fortløpende (overlever reload). I tillegg
+  til feltene over har den `discSel: [discId, …]` — discene valgt for DENNE
+  økten (se «Disc-utvalg»). Eldre pågående økter uten feltet viser alle discer,
+  som før funksjonen fantes.
 - `disc_settings`: `{theme, lyd, kt, demo, seeded}` — `seeded`: startdiscer er forsøkt sådd
   (kun ved fersk install, se «Onboarding»)
 
@@ -58,7 +67,9 @@ To økttyper (`sm`): **Lengdeøkt ("L")** og **Presisjonsøkt ("P")**. En økt i
 én eller flere **runder** (`S.cur.rounds`); en runde er ett kast+hent-slag fra ett
 kastested — f.eks. kast 20 discer, gå og hent dem, det er én runde.
 
-1. «Start økt» → GPS-måling av kastested (deliberat, `measurePoint`) → siktepunkt
+1. «Start økt» → **velg discer for økten** (`pickDiscsForSession()`, forhåndsvalgt
+   med forrige økts utvalg via `S.set.lastDiscSel`, eller alle aktive discer på
+   fersk install) → GPS-måling av kastested (deliberat, `measurePoint`) → siktepunkt
    (L, valgfritt) / mål (P, påkrevd før landing — f.eks. midt på banen). Kastested
    markeres alltid FØR mål/siktepunkt (bevisst rekkefølge — kastestedet er
    fundamentet all annen geometri i runden beregnes fra: avstand til mål, sikte-
@@ -95,6 +106,15 @@ bruker den deliberate `measurePoint`-modalen som venter på god nøyaktighet.
 
 Statistikken holder L og P helt adskilt (snittlengde blandes aldri med presisjonskast),
 og alt kan filtreres på BH/FH. P har eget målskive-kart med avstandsringer.
+Hovedsidens spredningskart kan i tillegg filtreres på disctype (`discTypeFilter`
+— Alle/Putter/Midrange/Fairway/Driver, kun dette kartet, ikke resten av siden)
+og byttes til et **varmekart** (`heatmapMode`, `toggle-heatmap`) — et rutenett
+fargelagt etter kast-tetthet (`heatmapSVG()`, `var(--green)` med varierende
+`fill-opacity` — sekvensiell éncoding fordi hensikten er MENGDE, ikke hvilken
+disc) i stedet for enkelt-markører, siden hundrevis av kast med disc-bilder
+fort blir uleselig rotete. Tooltip-lytteren matcher nå `[data-tip]` generelt
+(ikke bare `circle[data-tip]`) så både vanlige markører og varmekart-ruter
+kan trykkes for detaljer.
 I Statistikk-fanen viser øktdetaljen **rundefaner** («Alle» + «Runde 1», «Runde 2» …,
 kun synlig ved 2+ runder) — trykk for å bla mellom aggregert og enkelt-runde-visning
 uten å forlate skjermen (`stats.js`: `openSession` → `paintSession`, styrt av modul-
@@ -118,6 +138,25 @@ for seg (`trendCard`, snitt **per økt** kronologisk via `sessId`/`sessTs` fra
 `allThrows()` — se `sessionTrend()`), pluss et spredningskart/målskive filtrert til
 kun den ene discen (gjenbruker `scatterCard`/`targetCard`).
 
+## Disc-utvalg og sortering i kasteøkta
+
+- **`S.cur.discSel`** — discene valgt for aktiv økt (array av id-er), satt ved
+  øktstart og redigerbar når som helst via «🎒 Discer (N)»-knappen i live-
+  visningen (`pickDiscsForSession()`/`paintDiscSel()` i session.js, delt modal
+  `#m-discsel`). Kastegridet viser KUN valgte (og aktive/ikke-arkiverte) discer
+  — hensikten er å slippe å bla forbi hele biblioteket for å finne discen man
+  faktisk skal kaste. Siste utvalg huskes (`S.set.lastDiscSel`) som forslag
+  neste økt, så man vanligvis bare trykker «Ferdig» uten å endre noe.
+- **Sortering i kasteskjermen** er en tredje, egen sortering (`trainDiscSort` i
+  session.js, «↕️»-knappen ved siden av disc-utvalget) — Type/Speed/Navn, atskilt
+  fra både Discer-fanens (`discsSort`) og Statistikk-fanens (`discSort`)
+  sortering, siden alle tre har ulikt formål (rask kaste-tilgang vs. bla i
+  biblioteket vs. sammenligne prestasjon).
+- **«Kast alle»** (`logThrowAll()`, kun i Kaster-modus, vises når 2+ discer er
+  valgt) logger ett `pend`-kast for HVER disc i gjeldende utvalg/sortering med
+  ett trykk — for når man kaster hele bagen i sekvens før man går og henter.
+  Samme undo-snapshot som enkelttrykk.
+
 ## UX-regler
 
 - **Alle knapper reagerer på standard `click` (slipp-basert), IKKE `pointerdown`.**
@@ -136,10 +175,18 @@ kun den ene discen (gjenbruker `scatterCard`/`targetCard`).
   aldri tolkes som sidescroll.
 - Aldri `alert()`/`confirm()` — `data-arm` gir to-trykks bekreftelse.
 - Treningsskjermen scroller aldri på øverste nivå (disc-grid scroller internt,
-  nå fritt siden touch-action ikke lenger blokkerer det).
+  nå fritt siden touch-action ikke lenger blokkerer det). `renderTrain()` lagrer
+  og gjenoppretter `.discgrid`s `scrollTop` rundt hvert `innerHTML`-bytte —
+  ellers hopper visningen til toppen på hvert eneste disc-trykk, siden et helt
+  nytt grid-element (med scrollTop 0) lages hver gang.
 - Trykk-feedback: gullring + `vibrate(18)` på alle `data-act`-trykk.
 - Kart-tooltip (trykk et punkt for lengde/dato) bruker samme `click`-mønster
   (egen delegert lytter i stats.js, uavhengig av `data-act`-systemet).
+- **Trykk utenfor arket lukker modalen** — kun på `#m-session` (økt-/disc-
+  detalj): en delegert `click`-lytter i stats.js sjekker `e.target.id ===
+  "m-session"` (altså selve bakgrunnen, ikke `.sheet`-barnet) og lukker.
+  Bevisst IKKE på andre modaler (skjema/GPS-måling/kartvalg/vind) — der skal
+  et feiltrykk aldri kunne slette en påbegynt handling ved et uhell.
 - Undo (snapshot-stack) på alt som logger data i økten.
 - Norsk språk i hele UI-et. Respekter `prefers-reduced-motion`.
 
@@ -152,7 +199,12 @@ kun den ene discen (gjenbruker `scatterCard`/`targetCard`).
   - **Anker-punkter** (kastested/siktepunkt/mål): `measurePoint()` i geo.js —
     åpner modal, samler fikser via `watchPosition`, vektet snitt av de beste,
     brukeren godkjenner med «Bruk punkt». Disse punktene definerer hele rundens
-    referanseramme, så presisjon prioriteres over hastighet her.
+    referanseramme, så presisjon prioriteres over hastighet her. Modalen viser
+    i tillegg et lite, PASSIVT (ingen pan/zoom — `dragging:false` osv.)
+    satellittkart (`#ms-map`, `updateMeasMap()`) som oppdateres for hver fiks —
+    en rask visuell bekreftelse på at GPS-en faktisk plasserer deg der du står,
+    ikke bare et nøyaktighetstall. Vises først når første fiks kommer inn
+    (`#ms-map:empty{display:none}`), lukkes/ryddes via `closeMeasMap()`.
   - **Kast/landing** (høyfrekvent, opptil ~40 trykk per runde): kontinuerlig
     `watchPosition` fra øktstart (`startGpsWatch()` i session.js) holder `gpsFix`
     oppdatert i bakgrunnen. Et trykk på en disc i hentemodus bruker `gpsFix` direkte,
@@ -183,16 +235,43 @@ kun den ene discen (gjenbruker `scatterCard`/`targetCard`).
   retninger har data. Øktlisten og øktdetaljen viser øktas vind
   (`sessionWindText`: «varierende vind» hvis rundene spriker).
 
-## Kartvalg av siktepunkt (lengdeøkt)
+## Vær
 
-- **`js/mapaim.js`** — tredje måte å sette siktepunkt på (i tillegg til fysisk
-  GPS-måling / «forrige kastested»/«behold»): et satellittkart der du trykker
-  eller drar en markør dit du vil sikte, uten å måtte gå dit selv. Kun for
-  **lengdeøkt** — presisjonsøktens mål går fortsatt alltid via fysisk måling
-  (`measurePoint`), siden nøyaktighet der bør prioriteres over hastighet.
-  `pickAimOnMap(origin)` returnerer `Promise<{la,lo,acc:null}|null>`, samme
-  async-mønster som `measurePoint()`, så kalleren i session.js (`aimMap()`)
-  ser lik ut som de andre sikte-valgene.
+- **`js/weather.js`** — live værdata (temperatur, nedbør, vindstyrke/-retning)
+  fra **Open-Meteo** (gratis, ingen API-nøkkel/konto), vist som en chip til
+  VENSTRE for vind-chippen (`weatherChipHTML()` i chip-raden i `liveHTML()`).
+  Hentes én gang ved øktstart (`startWeather()`, basert på kastestedets
+  koordinater) og friskes hvert 15. minutt mens økten pågår
+  (`startWeather`/`stopWeather` følger samme livssyklus som `gpsWatch`/
+  `wakeLock` — startes i `startSession()`/`resumeSession()`, stoppes i
+  `finishSession()`).
+- **Rent visningsformål — lagres ALDRI i statistikken** og påvirker aldri
+  🚩-vindflagget. Flagget forblir en fullstendig separat, subjektiv vurdering
+  brukeren selv setter (se «Vind») — værdataen er bare konteksten man ser mens
+  man vurderer, appen kobler dem aldri sammen automatisk.
+
+## Kartvalg (siktepunkt, startpunkt, og live under økten)
+
+- **`js/mapaim.js`** — delt Leaflet-modal (`#m-mapaim`) med **tre modi**, styrt
+  av modul-variabelen `mode`:
+  - `pickAimOnMap(origin)` — sett siktepunkt/mål ved å trykke/dra en markør,
+    kastested vises fast som referanse (▲). Kun **lengdeøkt** — presisjonsøktens
+    mål går fortsatt alltid via fysisk måling (`measurePoint`), siden nøyaktighet
+    der bør prioriteres over hastighet.
+  - `pickStartOnMap(title, center)` — sett kastested/startpunkt på kartet i
+    stedet for å GPS-måle det (tilbys som «🗺️ Velg på kart» fra selve
+    målemodalen, `measure-map`-handlingen i geo.js).
+  - `reviewOnMap(start, aim, liveFixGetter)` — **kart underveis i økten**
+    («🗺️ Kart»-knappen i live-visningen, `openLiveMap()` i session.js): viser
+    BÅDE kastested og siktepunkt/mål som dragbare markører (for å justere om
+    noe ble feil, uten å måle på nytt fra bunnen) PLUSS et levende «du er
+    her»-punkt (blå prikk, `.mapmark-live`) som polles hvert 3. sekund fra den
+    kontinuerlige GPS-en som allerede kjører (`gpsFix` — starter INGEN ny
+    posisjonsforespørsel). Alle tre modi deler samme `finish()`/action-par
+    (`mapaim-use`/`mapaim-cancel`), som grener på `mode` for å bygge riktig
+    resultat-objekt.
+  Alle tre returnerer `Promise<...|null>`, samme async-mønster som
+  `measurePoint()`.
 - **Leaflet** (vendoret i `vendor/leaflet/`) + **Esri World Imagery**-fliser
   (gratis, ingen API-nøkkel, hentes fra `server.arcgisonline.com` ved kjøretid).
   Valgt fremfor Google Maps (krever API-nøkkel + betalingskort-bundet
@@ -202,11 +281,15 @@ kun den ene discen (gjenbruker `scatterCard`/`targetCard`).
   cachet av service workeren som alt annet, men de FAKTISKE flisbildene
   (satellittbildene) må hentes fra nett der og da — kan ikke forhåndslagres
   for ukjente steder. Uten nett viser kartmodalen seg, men uten bilder.
-- Markørene er `L.divIcon` med emoji (▲ for kastested, fast/ikke-flyttbar;
-  🎯 for siktepunktet, drabar + trykk-hvor-som-helst-på-kartet flytter den) —
-  ikke Leaflets standard-markørbilder, så ingen ekstra ikon-filer å vendorere.
+- Markørene er `L.divIcon` med emoji (▲ for kastested; 📍 tegnestift for
+  siktepunkt/startpunkt/valgbare punkter i review-modus — IKKE en dartskive:
+  en pin har et entydig «punkt», spissen nederst, som skal treffe koordinaten,
+  det har ikke en symmetrisk sirkel. `iconAnchor` er derfor satt til spissen
+  (`[14,27]` av `[28,28]`), ikke senter — en tidligere versjon brukte 🎯 med
+  senter-anchor, som visuelt så ut til å treffe et annet sted enn trykket).
+  Ikke Leaflets standard-markørbilder, så ingen ekstra ikon-filer å vendorere.
   `#mapaim-map` må ha eksplisitt størrelse FØR `L.map()` initialiseres (ellers
-  blir fliskartet feilberegnet) — derfor venter `pickAimOnMap()` to
+  blir fliskartet feilberegnet) — derfor venter alle tre pick-funksjonene to
   `requestAnimationFrame`-runder etter `openModal()` før kartet bygges.
 
 ## Farger

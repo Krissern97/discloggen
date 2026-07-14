@@ -8,18 +8,30 @@
 import { $, ACTIONS, openModal, closeModal, toast, flash, confetti, applause, esc, fmtM, fmt1, fmtSide, fmtDate, fmtWind, WIND_DIRS, WIND_STRS, rerender, uid } from "./util.js";
 import { S, saveCur, saveSessions, saveSet, snapshot, undo, canUndo, clearUndo, discById, activeDiscs, curRound, allThrows, missOf } from "./state.js";
 import { measurePoint, decompose, distM, demoPoint } from "./geo.js";
-import { pickAimOnMap } from "./mapaim.js";
+import { pickAimOnMap, reviewOnMap } from "./mapaim.js";
+import { TYPES } from "./discs.js";
+import { fetchWeather, clearWeather, weatherChipHTML } from "./weather.js";
 
 /* ---------- rendering ---------- */
 
 let gpsFix = null;   // {la, lo, acc, ts} — siste kjente posisjon, oppdateres kontinuerlig
 let gpsWatch = null;
 let wakeLock = null;
+let weatherTimer = null;
+let trainDiscSort = "type"; // "type" | "speed" | "navn" — kun kasteskjermens grid, egen fra Discer-fanen/statistikk
 
 export function renderTrain() {
   const v = $("#v-train");
+  // Full innerHTML-bytte lager et helt nytt .discgrid-element hver gang, som
+  // alltid starter på scrollTop 0 — uten dette hopper siden til toppen hver
+  // gang man trykker en disc langt nede i en scrollet liste. Lagre/gjenopprett
+  // scrollposisjonen rundt byttet så trykket ikke flytter blikkfeltet.
+  const prevGrid = v.querySelector(".discgrid");
+  const scrollTop = prevGrid ? prevGrid.scrollTop : 0;
   if (!S.cur) { v.innerHTML = idleHTML(); return; }
   v.innerHTML = liveHTML();
+  const grid = v.querySelector(".discgrid");
+  if (grid) grid.scrollTop = scrollTop;
 }
 
 function idleHTML() {
@@ -75,19 +87,23 @@ function liveHTML() {
       <div class="stat gold"><b class="num">${throws.length ? Math.round(maks) : "–"}</b><span>Maks m</span></div>`;
   }
 
-  const discs = activeDiscs();
-  const grid = (mode === "kast" ? discs : discs.filter(d => r.pend.some(p => p.discId === d.id)))
+  const totalActive = activeDiscs().length;
+  const selDiscs = sortedSelectedDiscs();
+  const grid = (mode === "kast" ? selDiscs : selDiscs.filter(d => r.pend.some(p => p.discId === d.id)))
     .map(d => discBtn(d, r, mode)).join("");
 
   const gridBody = grid || `<div class="card center" style="grid-column:1/-1">
-    <p class="sub">${mode === "hent" ? "Ingen discer er ute i denne runden. Bytt til «Kaster» og logg kastene først." : "Ingen discer lagt til ennå."}</p>
-    ${mode === "kast" ? `<button class="ghost mt8 playbtn" data-act="tab" data-arg="discs" style="width:100%">🎒 Legg til disc</button>` : ""}</div>`;
+    <p class="sub">${
+      mode === "hent" ? "Ingen discer er ute i denne runden. Bytt til «Kaster» og logg kastene først."
+      : !totalActive ? "Ingen discer lagt til ennå."
+      : "Ingen discer valgt for denne økten."}</p>
+    ${mode === "kast" ? (totalActive
+      ? `<button class="ghost mt8 playbtn" data-act="edit-discsel" style="width:100%">🎒 Velg discer</button>`
+      : `<button class="ghost mt8 playbtn" data-act="tab" data-arg="discs" style="width:100%">🎒 Legg til disc</button>`) : ""}</div>`;
 
   return `
-    <div class="row">
-      <div><div class="eyebrow">${P ? "🎯 Presisjonsøkt" : "Lengdeøkt"} · runde ${S.cur.rounds.length}</div></div>
-      <div style="display:flex;gap:6px">${windChipHTML(r)}${gpsChipHTML()}</div>
-    </div>
+    <div class="eyebrow">${P ? "🎯 Presisjonsøkt" : "Lengdeøkt"} · runde ${S.cur.rounds.length}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">${weatherChipHTML()}${windChipHTML(r)}${gpsChipHTML()}</div>
     <div class="statrow mt8">${kpi}</div>
     <div class="seg mt8">
       <button class="${mode === "kast" ? "on" : ""}" data-act="mode" data-arg="kast">🥏 Kaster</button>
@@ -98,10 +114,18 @@ function liveHTML() {
       <button class="${S.set.kt === "BH" ? "on" : ""}" data-act="kt" data-arg="BH">Backhand</button>
       <button class="${S.set.kt === "FH" ? "on" : ""}" data-act="kt" data-arg="FH">Forehand</button>
     </div>
+    <div class="btnrow mt8" style="margin-top:8px">
+      <button class="ghost playbtn" data-act="edit-discsel">🎒 Discer (${selDiscs.length})</button>
+      <button class="ghost playbtn" data-act="cycle-discsort">↕️ ${SORT_LABELS[trainDiscSort]}</button>
+    </div>
+    ${selDiscs.length > 1 ? `<button class="ghost mt8 playbtn" data-act="throw-all" style="width:100%">🥏 Kast alle (${selDiscs.length})</button>` : ""}
     <p class="sub mt8 center">Trykk på discen i det du kaster den${P ? " mot målet" : ""}</p>` : `
     <p class="sub mt8 center">Stå ved discen og trykk — posisjonen logges med en gang</p>`}
     <div class="discgrid mt8">${gridBody}</div>
-    ${!r.aim ? `<button class="ghost mt8 playbtn" data-act="set-aim" style="width:100%">${P ? "🎯 Merk målet (må settes før landing)" : "🎯 Sett siktepunkt (for retningsstatistikk)"}</button>` : ""}
+    <div class="btnrow mt8">
+      ${!r.aim ? `<button class="ghost playbtn" data-act="set-aim">${P ? "🎯 Merk målet" : "🎯 Sett siktepunkt"}</button>` : ""}
+      <button class="ghost playbtn" data-act="review-map">🗺️ Kart</button>
+    </div>
     <div class="btnrow" style="margin-bottom:6px">
       <button class="ghost playbtn" data-act="undo" ${canUndo() ? "" : "disabled"}>↩︎ Angre</button>
       <button class="ghost playbtn" data-act="new-round">Ny runde</button>
@@ -117,6 +141,59 @@ function discBtn(d, r, mode) {
   return `<button class="discbtn playbtn" data-act="disc-tap" data-arg="${d.id}" style="--dc:var(--c${d.ci})">
     ${badge ? `<span class="badge num">${badge}</span>` : ""}
     ${img}<b>${esc(d.navn)}</b><small>${esc(d.type)}</small></button>`;
+}
+
+/* ---------- disc-utvalg + sortering for kasteskjermen ----------
+   S.cur.discSel: array av disc-id-er valgt for DENNE økten (utvidbart når
+   som helst) — egen greie fra biblioteket i Discer-fanen, som fortsatt
+   viser alle discene. Uten discSel (gamle pågående økter fra før denne
+   funksjonen fantes) vises alle aktive discer som før. */
+
+const SORT_LABELS = { type: "Type", speed: "Speed", navn: "Navn" };
+const SORT_CYCLE = ["type", "speed", "navn"];
+
+function sortedSelectedDiscs() {
+  const sel = S.cur.discSel;
+  const discs = activeDiscs().filter(d => !sel || sel.includes(d.id));
+  const sorters = {
+    type: (a, b) => TYPES.indexOf(a.type) - TYPES.indexOf(b.type) || a.navn.localeCompare(b.navn, "nb"),
+    speed: (a, b) => (b.sp ?? -Infinity) - (a.sp ?? -Infinity),
+    navn: (a, b) => a.navn.localeCompare(b.navn, "nb"),
+  };
+  return [...discs].sort(sorters[trainDiscSort]);
+}
+
+let discSelState = null; // Set<string> mens m-discsel er åpen
+let discSelResolve = null;
+
+function pickDiscsForSession(title, initial) {
+  return new Promise(resolve => {
+    discSelResolve = resolve;
+    discSelState = new Set(initial ?? activeDiscs().map(d => d.id));
+    $("#discsel-title").textContent = title;
+    paintDiscSel();
+    openModal("m-discsel");
+  });
+}
+
+function paintDiscSel() {
+  const discs = activeDiscs();
+  $("#discsel-list").innerHTML = discs.length
+    ? discs.map(d => `<button class="discrow mt8 ${discSelState.has(d.id) ? "sel" : ""}" data-act="discsel-toggle" data-arg="${d.id}" style="--dc:var(--c${d.ci})">
+        ${d.img ? `<img src="${d.img}" alt="">` : `<span class="noimg">🥏</span>`}
+        <span class="info"><b>${esc(d.navn)}</b><small>${esc(d.type)}</small></span>
+        <span class="mini" style="font-size:20px">${discSelState.has(d.id) ? "✅" : "⬜"}</span>
+      </button>`).join("")
+    : `<p class="sub center">Ingen discer i biblioteket ennå.</p>`;
+}
+
+function finishDiscSel() {
+  closeModal("m-discsel");
+  const sel = [...discSelState];
+  discSelState = null;
+  const r = discSelResolve;
+  discSelResolve = null;
+  if (r) r(sel);
 }
 
 /* ---------- vind for runden ----------
@@ -164,14 +241,21 @@ function gpsChipHTML() {
 /* ---------- økt-livssyklus ---------- */
 
 async function startSession(sm) {
+  if (!activeDiscs().length) { toast("Legg til en disc først 🎒"); return; }
+  const discSel = await pickDiscsForSession("Discer for økten", S.set.lastDiscSel);
+  if (!discSel) return; // (skjer aldri i praksis — «Ferdig» er eneste utgang, men vær føre var)
   const p = await measurePoint("Merk kastested", "start");
   if (!p) return;
-  S.cur = { id: uid(), ts: Date.now(), sm, rounds: [{ start: p, aim: null, pend: [], throws: [], ts: Date.now() }] };
+  S.set.lastDiscSel = discSel;
+  saveSet();
+  S.cur = { id: uid(), ts: Date.now(), sm, discSel, rounds: [{ start: p, aim: null, pend: [], throws: [], ts: Date.now() }] };
   S.mode = "kast";
+  trainDiscSort = "type";
   clearUndo();
   saveCur();
   startGpsWatch();
   reqWakeLock();
+  startWeather(p);
   rerender();
   if (sm === "P") openAim([
     { act: "aim-new", label: "🎯 Merk målet nå", primary: true },
@@ -213,6 +297,7 @@ function finishSession() {
   clearUndo();
   stopGpsWatch();
   releaseWakeLock();
+  stopWeather();
   rerender();
 }
 
@@ -224,6 +309,19 @@ function logThrow(discId) {
   saveCur();
   rerender();
   toast(`${discById(discId)?.navn ?? "Disc"} kastet (${S.set.kt})`);
+}
+
+/* logger ett kast for HVER disc i det valgte/sorterte utvalget samtidig —
+   for når man kaster hele bagen i sekvens før man går og henter. */
+function logThrowAll() {
+  const discs = sortedSelectedDiscs();
+  if (!discs.length) return;
+  snapshot();
+  const r = curRound();
+  for (const d of discs) r.pend.push({ id: uid(), discId: d.id, kt: S.set.kt, ts: Date.now() });
+  saveCur();
+  rerender();
+  toast(`${discs.length} discer kastet (${S.set.kt})`);
 }
 
 /* siste kjente GPS-fiks — i demo-modus simuleres et ferskt punkt hvert kall */
@@ -386,6 +484,23 @@ function recompute(r) {
   saveCur();
 }
 
+/* ---------- kart underveis i økten ----------
+   Viser kastested + siktepunkt/mål (begge dragbare) pluss et levende
+   «du er her»-punkt fra den kontinuerlige GPS-en som allerede kjører — så
+   man kan sjekke at man faktisk står der man tror, og justere punktene
+   direkte hvis noe ble feil, uten å måtte måle på nytt fra bunnen. */
+async function openLiveMap() {
+  const r = curRound();
+  const result = await reviewOnMap(r.start, r.aim, () => (S.set.demo ? demoPoint("land") : gpsFix));
+  if (!result) return;
+  const { start, aim } = result;
+  let changed = false;
+  if (start.la !== r.start.la || start.lo !== r.start.lo) { r.start = start; changed = true; }
+  const aimChanged = aim === null ? r.aim !== null : (!r.aim || aim.la !== r.aim.la || aim.lo !== r.aim.lo);
+  if (aimChanged) { r.aim = aim; changed = true; }
+  if (changed) { recompute(r); saveCur(); toast("Kart oppdatert 🗺️"); rerender(); }
+}
+
 /* ---------- kontinuerlig GPS + Wake Lock under aktiv økt ---------- */
 
 function startGpsWatch() {
@@ -412,11 +527,28 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && S.cur) reqWakeLock();
 });
 
+/* ---------- live vær (ren visning, se weather.js) ---------- */
+
+function startWeather(point) {
+  if (weatherTimer !== null) return;
+  const tick = () => fetchWeather(point.la, point.lo).then(() => {
+    const chip = $("#weather-chip");
+    if (chip && S.cur) chip.outerHTML = weatherChipHTML();
+  });
+  tick();
+  weatherTimer = setInterval(tick, 15 * 60 * 1000); // frisk vær hvert 15. min under lange økter
+}
+function stopWeather() {
+  if (weatherTimer !== null) { clearInterval(weatherTimer); weatherTimer = null; }
+  clearWeather();
+}
+
 /* gjenoppta pågående økt etter reload/app-bytte */
 export function resumeSession() {
   if (!S.cur) return;
   startGpsWatch();
   reqWakeLock();
+  if (S.cur.rounds[0]?.start) startWeather(S.cur.rounds[0].start);
   toast("Pågående økt gjenopptatt");
 }
 
@@ -453,4 +585,21 @@ Object.assign(ACTIONS, {
   "wind-str":   s => setWind({ s: Number(s) }),
   "wind-clear": () => { snapshot(); curRound().wind = undefined; saveCur(); closeModal("m-wind"); toast("Vind fjernet"); rerender(); },
   "wind-close": () => { closeModal("m-wind"); rerender(); },
+  "throw-all": logThrowAll,
+  "review-map": openLiveMap,
+  "edit-discsel": async () => {
+    const sel = await pickDiscsForSession("Discer i denne økten", S.cur.discSel);
+    S.cur.discSel = sel;
+    S.set.lastDiscSel = sel;
+    saveSet();
+    saveCur();
+    rerender();
+  },
+  "discsel-toggle": id => { discSelState.has(id) ? discSelState.delete(id) : discSelState.add(id); paintDiscSel(); },
+  "discsel-all": () => { activeDiscs().forEach(d => discSelState.add(d.id)); paintDiscSel(); },
+  "discsel-done": finishDiscSel,
+  "cycle-discsort": () => {
+    trainDiscSort = SORT_CYCLE[(SORT_CYCLE.indexOf(trainDiscSort) + 1) % SORT_CYCLE.length];
+    rerender();
+  },
 });

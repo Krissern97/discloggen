@@ -17,6 +17,7 @@
 <div class="modal" id="m-session"><div class="sheet" id="sd-body"></div></div>
 <div class="modal" id="m-aim"><div class="sheet"><h2 id="aim-title"></h2><div id="aim-opts"></div></div></div>
 <div class="modal" id="m-wind"><div class="sheet"><div id="wind-dirs"></div><div id="wind-str-field"><div id="wind-strs"></div></div></div></div>
+<div class="modal" id="m-discsel"><div class="sheet"><h2 id="discsel-title"></h2><div id="discsel-list"></div></div></div>
 <div id="toast" style="display:none"></div>
 <div id="flash" style="display:none"></div>
 
@@ -243,15 +244,36 @@ const liveNoAim = document.getElementById("v-train").innerHTML;
 assert("live presisjonsøkt: viser «–» for avstand før mål er satt", /Avstand mål/.test(liveNoAim) && liveNoAim.includes(">–<"));
 S.cur = null;
 
-// --- kartvalg av siktepunkt: tilbys ved start av lengdeøkt ---
+// --- disc-utvalg + kartvalg av siktepunkt: tilbys ved start av lengdeøkt ---
 S.set.demo = true;
 S.discs = [{ id: "dtest", navn: "Test", type: "Putter", ci: 0, img: null, ark: false, ts: 1 }];
 S.cur = null;
+S.set.lastDiscSel = null;
 ACTIONS["start-session"]("L");
-await new Promise(r => setTimeout(r, 50));
+await new Promise(r => setTimeout(r, 30));
+assert("disc-utvalg: modal åpnes ved øktstart, før noe annet skjer", document.getElementById("m-discsel").classList.contains("open") && !S.cur);
+assert("disc-utvalg: eneste disc er forhåndsvalgt (✅)", document.getElementById("discsel-list").innerHTML.includes("✅"));
+ACTIONS["discsel-done"](); // bekreft utvalget → lar startSession fortsette til kastested + siktevalg
+await new Promise(r => setTimeout(r, 30));
+assert("disc-utvalg: S.cur.discSel settes til de bekreftede discene", Array.isArray(S.cur?.discSel) && S.cur.discSel.includes("dtest"));
 const aimOpts = document.getElementById("aim-opts").innerHTML;
 assert("lengdeøkt-siktevalg: «Velg på kart»-alternativ tilbys", aimOpts.includes("Velg på kart"));
 assert("aim-map-handlingen er registrert", typeof ACTIONS["aim-map"] === "function");
+
+// --- endre disc-utvalg midt i økten ---
+S.discs.push({ id: "dtest2", navn: "Test2", type: "Driver", ci: 1, img: null, ark: false, ts: 1 });
+ACTIONS["edit-discsel"]();
+await new Promise(r => setTimeout(r, 30));
+ACTIONS["discsel-toggle"]("dtest2");
+ACTIONS["discsel-done"]();
+await new Promise(r => setTimeout(r, 30));
+assert("disc-utvalg rediger: ny disc lagt til i utvalget lagres på runden", S.cur.discSel.includes("dtest") && S.cur.discSel.includes("dtest2"));
+renderTrain();
+assert("kasteskjerm: viser begge valgte discer i gridet", document.getElementById("v-train").innerHTML.includes("Test2"));
+
+// --- «Kast alle»: logger pend for hver valgte disc samtidig ---
+ACTIONS["throw-all"]();
+assert("kast alle: legger pend for alle valgte discer", S.cur.rounds[0].pend.length === 2);
 
 // --- vind: chip i live-visning, setting via handlinger, arv til ny runde ---
 renderTrain();
@@ -292,9 +314,49 @@ ACTIONS["wfilter"]("mot");
 const statsMot = document.getElementById("v-stats").innerHTML;
 assert("motvind-filter: kun motvind-kastet telles (1 kast, 80 m)", statsMot.includes(">1<") && statsMot.includes(">80<"));
 ACTIONS["wfilter"]("ALL");
-
 S.cur = null;
 S.set.demo = false;
+
+// --- statistikk: disctype-filter + varmekart-toggle på lengdekartet ---
+const hStart = { la: 60, lo: 10 };
+const hAim = destination(hStart, 0, 60);
+const mkHeat = (discId, fwd, side) => {
+  const land = destination(destination(hStart, 0, fwd), 90, side);
+  const dd = decompose(hStart, hAim, land);
+  return { id: "h" + Math.random(), discId, kt: "BH", dist: dd.dist, side: dd.side, frem: dd.frem, acc: 4, ts: Date.now(), pos: land };
+};
+S.discs = [
+  { id: "hp", navn: "HeatPutter", type: "Putter", ci: 0, img: null, ark: false, ts: 1 },
+  { id: "hd", navn: "HeatDriver", type: "Driver", ci: 1, img: null, ark: false, ts: 1 },
+];
+S.sessions = [{ id: "hs", ts: 1, end: 1, sm: "L", rounds: [{ ts: 1, start: hStart, aim: hAim, pend: [], throws: [mkHeat("hp", 55, 1), mkHeat("hp", 58, -2), mkHeat("hd", 90, 3)] }] }];
+renderStats();
+const statsAll = document.getElementById("v-stats").innerHTML;
+assert("disctype-filter vises over lengdekartet", statsAll.includes('data-act="typefilter"'));
+assert("varmekart-knapp vises (av som standard)", statsAll.includes("🔥 Vis som varmekart"));
+
+ACTIONS["typefilter"]("Driver");
+const statsDriver = document.getElementById("v-stats").innerHTML;
+assert("disctype-filter Driver: viser kun driver-kastet på kartet (1 markør)", (statsDriver.match(/r="14"/g) || []).length === 1);
+ACTIONS["typefilter"]("ALL");
+
+ACTIONS["toggle-heatmap"]();
+const statsHeat = document.getElementById("v-stats").innerHTML;
+assert("varmekart på: rutenett-rects vises, knapp bytter tekst", statsHeat.includes("<rect") && statsHeat.includes("Vis discer på kartet"));
+ACTIONS["toggle-heatmap"]();
+const statsBack = document.getElementById("v-stats").innerHTML;
+assert("varmekart av: tilbake til vanlige markører (ingen rect)", !statsBack.includes("<rect"));
+
+// --- trykk utenfor arket lukker økt-/disc-detaljen, trykk INNI gjør ikke ---
+ACTIONS["session-open"]("hs");
+assert("øktdetalj: modal er åpen", document.getElementById("m-session").classList.contains("open"));
+document.getElementById("m-session").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+assert("øktdetalj: trykk på bakgrunn (utenfor arket) lukker modalen", !document.getElementById("m-session").classList.contains("open"));
+
+ACTIONS["session-open"]("hs");
+document.getElementById("sd-body").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+assert("øktdetalj: trykk INNI arket lukker IKKE modalen", document.getElementById("m-session").classList.contains("open"));
+ACTIONS["session-close"]();
 
 out.innerHTML += `<div id="sum">${fails ? "FAILS:" + fails : "ALLE TESTER OK"}</div>`;
 </script>

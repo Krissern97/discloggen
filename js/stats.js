@@ -4,9 +4,12 @@
 
 import { $, ACTIONS, openModal, closeModal, toast, esc, fmtM, fmt1, fmtSide, fmtDate, fmtTime, fmtWind, windDirLabel, rerender } from "./util.js";
 import { S, saveSessions, discById, allThrows, missOf } from "./state.js";
+import { TYPES } from "./discs.js";
 
 let filter = "ALL"; // ALL | BH | FH
 let windFilter = "ALL"; // ALL | mot | med | side | stille — "side" matcher både høyre og venstre
+let discTypeFilter = "ALL"; // ALL | Putter | Midrange | Fairway | Driver — kun hovedsidens lengdekart
+let heatmapMode = false;    // samme kart: tetthets-rutenett i stedet for enkelt-markører
 let sessionMap = null;
 
 /* passer kastets rundevind med valgt vindfilter? Kast uten logget vind vises
@@ -28,6 +31,8 @@ export function renderStats() {
   const P = throws.filter(t => t.sm === "P" && t.td !== undefined);
   const anyWind = all.some(t => t.wind?.d);
   const wtab = (val, label) => `<button class="${windFilter === val ? "on" : ""}" data-act="wfilter" data-arg="${val}">${label}</button>`;
+  const typeTab = (val, label) => `<button class="${discTypeFilter === val ? "on" : ""}" data-act="typefilter" data-arg="${val}">${label}</button>`;
+  const chartL = discTypeFilter === "ALL" ? L : L.filter(t => discById(t.discId)?.type === discTypeFilter);
 
   v.innerHTML = `
     <div class="eyebrow">Discloggen</div>
@@ -42,7 +47,11 @@ export function renderStats() {
     </div>` : ""}
     ${windFilter !== "ALL" && !throws.length ? `<div class="card mt12 center"><p class="sub">Ingen kast logget i ${windFilter === "side" ? "sidevind" : windFilter === "stille" ? "vindstille" : windFilter + "vind"} ennå.</p></div>` : ""}
     ${kpiHTML(L)}
-    ${scatterCard(L, "Spredningskart — lengdekast")}
+    ${L.length ? `<div class="seg mt12">
+      ${typeTab("ALL", "Alle")}${TYPES.map(t => typeTab(t, t === "Midrange" ? "Mid" : t)).join("")}
+    </div>
+    <button class="ghost mt8 playbtn" data-act="toggle-heatmap" style="width:100%">${heatmapMode ? "🥏 Vis discer på kartet" : "🔥 Vis som varmekart"}</button>` : ""}
+    ${scatterCard(chartL, "Spredningskart — lengdekast", heatmapMode)}
     ${precisionHTML(P)}
     ${windFilter === "ALL" ? windEffectHTML(all) : ""}
     ${perDiscUnifiedHTML(L, P)}
@@ -286,9 +295,11 @@ const avgArr = xs => xs.reduce((a, x) => a + x, 0) / xs.length;
 
 /* ---------- spredningskart (SVG) ----------
    x = sideavvik fra siktelinja (+høyre/−venstre), y = meter fremover.
-   Kun kast med siktepunkt kan plottes. */
+   Kun kast med siktepunkt kan plottes. heatmap:true bytter individuelle
+   disc-markører ut med et rutenett fargelagt etter tetthet — nyttig når det
+   er hundrevis av kast og enkeltbilder av discer bare blir rot. */
 
-function scatterCard(throws, title) {
+function scatterCard(throws, title, heatmap = false) {
   const pts = throws.filter(t => t.side !== null && t.frem !== null);
   const missing = throws.length - pts.length;
   if (!pts.length) {
@@ -307,13 +318,15 @@ function scatterCard(throws, title) {
     grid += `<line x1="${L}" y1="${py(m)}" x2="${Rr}" y2="${py(m)}" stroke="var(--line)" stroke-width="1"/>
       <text x="${L - 4}" y="${py(m) + 3.5}" text-anchor="end" font-size="10" fill="var(--ink2)">${m}</text>`;
 
-  const dots = pts.map(p => {
-    const d = discById(p.discId);
-    const tip = `${Math.round(p.dist)} m · ${fmtSide(p.side)} · ${esc(d?.navn ?? "?")} · ${p.kt}`;
-    return markerSVG(px(p.side), py(p.frem), d, tip);
-  }).join("");
+  const marks = heatmap
+    ? heatmapSVG(pts, px, py, X, Y)
+    : pts.map(p => {
+        const d = discById(p.discId);
+        const tip = `${Math.round(p.dist)} m · ${fmtSide(p.side)} · ${esc(d?.navn ?? "?")} · ${p.kt}`;
+        return markerSVG(px(p.side), py(p.frem), d, tip);
+      }).join("");
 
-  const used = [...new Set(pts.map(p => p.discId))].map(id => discById(id)).filter(Boolean);
+  const used = heatmap ? [] : [...new Set(pts.map(p => p.discId))].map(id => discById(id)).filter(Boolean);
 
   return `<div class="card mt12"><div class="eyebrow">${title}</div>
     <div class="scatter mt8">
@@ -326,20 +339,44 @@ function scatterCard(throws, title) {
         <text x="${L}" y="${H - 6}" font-size="10" fill="var(--ink2)">← venstre</text>
         <text x="${Rr}" y="${H - 6}" text-anchor="end" font-size="10" fill="var(--ink2)">høyre →</text>
         <text x="${L - 4}" y="${T + 4}" text-anchor="end" font-size="10" fill="var(--ink2)">m</text>
-        ${dots}
+        ${marks}
       </svg>
       <div class="tip"></div>
     </div>
     ${legendHTML(used)}
-    <p class="sub mt8">Trykk et punkt for å se nøyaktig lengde.${missing ? ` ${missing} kast uten siktepunkt vises ikke (telles i tallene).` : ""}</p>
+    <p class="sub mt8">${heatmap ? "Mørkere felt = flere kast der." : "Trykk et punkt for å se nøyaktig lengde."}${missing ? ` ${missing} kast uten siktepunkt vises ikke (telles i tallene).` : ""}</p>
   </div>`;
 }
 
-/* tooltip: trykk på en prikk (click, ikke pointerdown — se util.js) */
+/* rutenett fargelagt etter kast-tetthet — enkelt sekvensielt fargekart
+   (én valør, lys→mørk via fill-opacity) i stedet for kategoriske disc-farger,
+   siden hensikten her er å se MENGDE, ikke hvilken disc. */
+function heatmapSVG(pts, px, py, X, Y) {
+  const cellW = Math.max(2, X / 10), cellH = Math.max(2, Y / 12);
+  const buckets = new Map();
+  for (const p of pts) {
+    const key = Math.floor(p.side / cellW) + "," + Math.floor(p.frem / cellH);
+    buckets.set(key, (buckets.get(key) ?? 0) + 1);
+  }
+  const maxCount = Math.max(...buckets.values());
+  let rects = "";
+  for (const [key, count] of buckets) {
+    const [cx, cy] = key.split(",").map(Number);
+    const x0 = px(cx * cellW), x1 = px((cx + 1) * cellW);
+    const y0 = py(cy * cellH), y1 = py((cy + 1) * cellH);
+    const alpha = 0.18 + 0.72 * (count / maxCount);
+    rects += `<rect x="${Math.min(x0, x1).toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}"
+      width="${Math.abs(x1 - x0).toFixed(1)}" height="${Math.abs(y1 - y0).toFixed(1)}"
+      fill="var(--green)" fill-opacity="${alpha.toFixed(2)}" data-tip="${count} kast her"/>`;
+  }
+  return rects;
+}
+
+/* tooltip: trykk et punkt eller en varmekart-rute (click, ikke pointerdown — se util.js) */
 document.addEventListener("click", e => {
   const tips = document.querySelectorAll(".scatter .tip");
   tips.forEach(t => { t.style.display = "none"; });
-  const c = e.target.closest?.("circle[data-tip]");
+  const c = e.target.closest?.("[data-tip]");
   if (!c) return;
   const wrap = c.closest(".scatter");
   const tip = wrap.querySelector(".tip");
@@ -604,14 +641,25 @@ function drawSessionMap(s, sel) {
   }
 }
 
+function closeSession() {
+  if (sessionMap) { sessionMap.remove(); sessionMap = null; }
+  closeModal("m-session");
+}
+
+/* trykk utenfor arket (på den mørke bakgrunnen) lukker økt-/disc-detaljen —
+   samme mønster som å dra ned et bunnark. Kun denne modalen: skjemaer/GPS-
+   måling/kartvalg lar man aldri lukke ved et uhell midt i en handling. */
+$("#m-session").addEventListener("click", e => {
+  if (e.target.id === "m-session") closeSession();
+});
+
 Object.assign(ACTIONS, {
   "sfilter": arg => { filter = arg; renderStats(); },
   "wfilter": arg => { windFilter = arg; renderStats(); },
+  "typefilter": arg => { discTypeFilter = arg; renderStats(); },
+  "toggle-heatmap": () => { heatmapMode = !heatmapMode; renderStats(); },
   "session-open": openSession,
-  "session-close": () => {
-    if (sessionMap) { sessionMap.remove(); sessionMap = null; }
-    closeModal("m-session");
-  },
+  "session-close": closeSession,
   "session-del": id => {
     if (sessionMap) { sessionMap.remove(); sessionMap = null; }
     S.sessions = S.sessions.filter(x => x.id !== id);

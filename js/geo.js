@@ -78,6 +78,7 @@ function startWatch() {
       ? "Godt signal — trykk «Bruk punkt»."
       : "Dårlig nøyaktighet (mål: under 12 m). Vent litt, eller bruk punktet likevel.";
     $("#ms-use").disabled = false;
+    updateMeasMap(b);
   }, err => {
     if (!meas) return;
     $("#ms-hint").textContent = err.code === 1
@@ -104,7 +105,35 @@ function stopMeasure(result) {
   const { resolve } = meas;
   meas = null;
   closeModal("m-measure");
+  closeMeasMap();
   resolve(result);
+}
+
+/* ---------- levende kart-forhåndsvisning i målemodalen ----------
+   Passiv (ingen pan/zoom) — kun en visuell bekreftelse på at GPS-en faktisk
+   plasserer deg der du tror du står. Vises først når første fiks kommer inn
+   (ingen fast senter finnes før det). */
+let measMap = null, measMarker = null;
+
+function updateMeasMap(b) {
+  if (typeof L === "undefined" || !$("#ms-map")) return;
+  if (!measMap) {
+    measMap = L.map("ms-map", {
+      attributionControl: false, zoomControl: false,
+      dragging: false, scrollWheelZoom: false, doubleClickZoom: false, tap: false,
+    }).setView([b.la, b.lo], 19);
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 20 }).addTo(measMap);
+    measMarker = L.marker([b.la, b.lo], {
+      icon: L.divIcon({ className: "", html: '<div class="mapmark-live"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }),
+      interactive: false,
+    }).addTo(measMap);
+  } else {
+    measMap.setView([b.la, b.lo]);
+    measMarker.setLatLng([b.la, b.lo]);
+  }
+}
+function closeMeasMap() {
+  if (measMap) { measMap.remove(); measMap = null; measMarker = null; }
 }
 
 Object.assign(ACTIONS, {
@@ -129,6 +158,7 @@ Object.assign(ACTIONS, {
     if (meas.watchId !== null) navigator.geolocation.clearWatch(meas.watchId);
     meas = null;
     closeModal("m-measure");
+    closeMeasMap();
     if (kind === "start") {
       const { pickStartOnMap } = await import("./mapaim.js");
       const result = await pickStartOnMap(title, center);
